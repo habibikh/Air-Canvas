@@ -97,9 +97,9 @@ export class HandTrackingService {
           },
           runningMode: 'VIDEO',
           numHands: 1,
-          minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5,
+          minHandDetectionConfidence: 0.38,
+          minHandPresenceConfidence: 0.38,
+          minTrackingConfidence: 0.38,
         });
       } catch (gpuErr) {
         console.warn('GPU acceleration unavailable or failed, using CPU delegate:', gpuErr);
@@ -110,9 +110,9 @@ export class HandTrackingService {
           },
           runningMode: 'VIDEO',
           numHands: 1,
-          minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5,
+          minHandDetectionConfidence: 0.38,
+          minHandPresenceConfidence: 0.38,
+          minTrackingConfidence: 0.38,
         });
       }
 

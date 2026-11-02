@@ -558,16 +558,16 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = React.memo(({
             {/* Live Gesture Tag */}
             {cameraStatus === 'active' && (
               <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider backdrop-blur-md bg-white/90 text-slate-800 shadow-xs">
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold border border-zinc-200/60 uppercase tracking-wider backdrop-blur-md bg-white/95 text-zinc-800 shadow-xs">
                   {currentGesture === 'draw' && '✍️ Writing'}
                   {currentGesture === 'erase' && '✋ Eraser'}
                   {currentGesture === 'cursor' && '✌️ Pointer'}
                   {currentGesture === 'pause' && '✊ Paused'}
-                  {currentGesture === 'none' && (isHandDetected ? 'Recognizing' : 'No Hand')}
+                  {currentGesture === 'none' && (isHandDetected ? 'Ready' : 'No Hand')}
                 </span>
                 {skeletonOnlyMode && (
-                  <span className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-indigo-600/90 text-white shadow-xs">
-                    Blank Area
+                  <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-zinc-900 text-cyan-300 shadow-xs uppercase tracking-wider">
+                    Hand Only
                   </span>
                 )}
               </div>

@@ -103,7 +103,6 @@ export const GestureCoach: React.FC<GestureCoachProps> = ({
             <div>
               <div className="flex items-center gap-1.5">
                 <h4 className="text-xs font-bold tracking-tight">{info.title}</h4>
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
               </div>
               <p className="text-[11px] opacity-80 mt-0.5 leading-snug">{info.subtitle}</p>
             </div>

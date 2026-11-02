@@ -125,9 +125,9 @@ export const Toolbar: React.FC<ToolbarProps> = React.memo(({
         </div>
       )}
 
-      <div className="glass-panel px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-2xl flex items-center gap-1.5 sm:gap-2.5 shadow-xl shadow-slate-900/5 overflow-x-auto max-w-full">
+      <div className="bg-white/90 backdrop-blur-md px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-2xl flex items-center gap-1.5 sm:gap-2.5 shadow-lg border border-zinc-200/80 overflow-x-auto max-w-full">
         {/* Tool Selectors */}
-        <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl shrink-0">
+        <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-xl shrink-0">
           {/* Pen */}
           <button
             onClick={() => {
@@ -136,8 +136,8 @@ export const Toolbar: React.FC<ToolbarProps> = React.memo(({
             }}
             className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               currentTool === 'pen'
-                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                ? 'bg-zinc-900 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/70'
             }`}
             title="Pen (Air gesture: 1 extended finger)"
             aria-label="Pen tool"
@@ -154,8 +154,8 @@ export const Toolbar: React.FC<ToolbarProps> = React.memo(({
             }}
             className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               currentTool === 'highlighter'
-                ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/25'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                ? 'bg-amber-500 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/70'
             }`}
             title="Highlighter (Semi-transparent stroke)"
             aria-label="Highlighter tool"
@@ -169,8 +169,8 @@ export const Toolbar: React.FC<ToolbarProps> = React.memo(({
             onClick={() => setShowShapeMenu(!showShapeMenu)}
             className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               isShapeTool
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                ? 'bg-zinc-900 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/70'
             }`}
             title="Shapes (Line, Rectangle, Circle)"
             aria-label="Shapes tool"
@@ -187,8 +187,8 @@ export const Toolbar: React.FC<ToolbarProps> = React.memo(({
             }}
             className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               currentTool === 'eraser'
-                ? 'bg-rose-600 text-white shadow-sm shadow-rose-500/25'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/70'
             }`}
             title="Eraser (Air gesture: Open palm)"
             aria-label="Eraser tool"
@@ -198,7 +198,7 @@ export const Toolbar: React.FC<ToolbarProps> = React.memo(({
           </button>
         </div>
 
-        <div className="h-5 sm:h-6 w-[1px] bg-slate-200 shrink-0"></div>
+        <div className="h-5 sm:h-6 w-[1px] bg-zinc-200 shrink-0"></div>
 
         {/* Color Palette (Active when drawing or highlighting) */}
         {currentTool !== 'eraser' ? (

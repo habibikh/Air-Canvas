@@ -1,20 +1,17 @@
 import React from 'react';
 import {
-  Camera,
-  CameraOff,
   Download,
   HelpCircle,
   Maximize2,
   Minimize2,
   Redo2,
-  RotateCcw,
   Settings,
   Trash2,
   Undo2,
-  Sparkles,
-  Compass,
+  Hand,
   Eye,
   EyeOff,
+  Compass,
 } from 'lucide-react';
 import { CameraStatus, GestureType } from '../types';
 import { AirCanvasLogo } from './AirCanvasLogo';
@@ -45,16 +42,11 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = React.memo(({
   cameraStatus,
-  currentGesture,
-  fps,
-  confidence,
-  isHandDetected,
   canUndo,
   canRedo,
   isFullscreen,
   showGestureCoach,
   skeletonOnlyMode,
-  onToggleCamera,
   onToggleCoach,
   onToggleSkeletonOnly,
   onUndo,
@@ -66,201 +58,131 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   onOpenSettings,
   onOpenLogoPreview,
 }) => {
-  const getGestureBadge = () => {
-    switch (currentGesture) {
-      case 'draw':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-sm animate-pulse">
-            <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-            DRAWING
-          </span>
-        );
-      case 'erase':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-rose-600"></span>
-            ERASING (PALM)
-          </span>
-        );
-      case 'cursor':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 border border-cyan-200 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
-            POINTER (2-FINGERS)
-          </span>
-        );
-      case 'pause':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-            PAUSED (FIST)
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
-            <span className={`w-2 h-2 rounded-full ${cameraStatus === 'active' ? (isHandDetected ? 'bg-cyan-400' : 'bg-slate-300') : 'bg-slate-300'}`}></span>
-            {cameraStatus === 'active' ? (isHandDetected ? 'HAND DETECTED' : 'WAITING FOR HAND') : 'STANDBY'}
-          </span>
-        );
-    }
-  };
-
   return (
-    <header className="absolute top-3 left-2 right-2 sm:top-4 sm:left-4 sm:right-4 z-30 pointer-events-none flex items-center justify-between gap-2">
-      {/* Brand & Status */}
-      <div className="pointer-events-auto flex items-center gap-2 sm:gap-3 glass-panel px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl shadow-sm shrink-0">
+    <header className="absolute top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 z-30 pointer-events-none flex items-center justify-between gap-3">
+      {/* Brand & Hand Only Control */}
+      <div className="pointer-events-auto flex items-center gap-2.5 sm:gap-3 bg-white/90 backdrop-blur-md px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl shadow-sm border border-zinc-200/80 shrink-0">
         <button
           onClick={onOpenLogoPreview}
-          className="group flex items-center gap-2 sm:gap-2.5 text-left rounded-xl p-1 -m-1 hover:bg-slate-100/70 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-          title="Click to preview brand logo & vector assets"
-          aria-label="Preview AirCanvas brand logo"
+          className="group flex items-center gap-2.5 text-left rounded-xl p-0.5 hover:opacity-90 transition-opacity cursor-pointer focus:outline-none"
+          title="AirCanvas Spatial Whiteboard"
+          aria-label="AirCanvas brand"
         >
           <div className="relative shrink-0">
-            <AirCanvasLogo size={36} showGlow={true} animated={true} />
-            <span className="absolute -bottom-1 -right-1 flex h-2.5 w-2.5 items-center justify-center">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-500"></span>
-            </span>
+            <AirCanvasLogo size={32} showGlow={false} animated={false} />
           </div>
-          <div>
-            <div className="flex items-center gap-1 sm:gap-1.5">
-              <h1 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 group-hover:text-indigo-600 transition-colors">AirCanvas</h1>
-              <span className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider px-1 sm:px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 hidden sm:inline-block">
-                Spatial AI
-              </span>
-              <span className="text-[9px] font-medium text-indigo-500 bg-indigo-50 px-1 py-0.2 rounded opacity-0 group-hover:opacity-100 transition-opacity hidden md:inline-flex items-center gap-0.5">
-                Preview
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm sm:text-base font-bold tracking-tight text-zinc-900 group-hover:text-indigo-600 transition-colors">
+                AirCanvas
               </span>
             </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium hidden md:block">Your ideas, in thin air.</p>
+            <span className="text-[10px] text-zinc-500 font-medium hidden md:block leading-none">
+              Your ideas, in thin air
+            </span>
           </div>
         </button>
 
-        <div className="h-5 sm:h-6 w-[1px] bg-slate-200 mx-0.5 hidden sm:block"></div>
+        <div className="h-5 w-[1px] bg-zinc-200 shrink-0"></div>
 
-        {/* Dynamic Gesture Pill */}
-        <div className="hidden lg:flex items-center">
-          {getGestureBadge()}
-        </div>
-
-        {/* Camera toggle pill */}
+        {/* Hand Only Button: Prominent, tactile studio toggle */}
         <button
-          onClick={onToggleCamera}
-          className={`px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 sm:gap-1.5 transition-all ${
-            cameraStatus === 'active'
-              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-              : cameraStatus === 'requesting'
-              ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse'
-              : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+          onClick={onToggleSkeletonOnly}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-xs ${
+            skeletonOnlyMode
+              ? 'bg-zinc-900 text-white ring-1 ring-zinc-900/50 hover:bg-zinc-800'
+              : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700 border border-zinc-200/80'
           }`}
-          title={cameraStatus === 'active' ? 'Turn off camera tracking' : 'Turn on camera tracking'}
-          aria-label={cameraStatus === 'active' ? 'Turn off camera' : 'Turn on camera'}
+          title={
+            skeletonOnlyMode
+              ? 'Hand Only mode active (blank room background). Click to show camera feed.'
+              : 'Click to enable Hand Only mode: hides camera video and traces hand only on clean canvas'
+          }
+          aria-label="Toggle Hand Only mode"
         >
-          {cameraStatus === 'active' ? (
+          {skeletonOnlyMode ? (
             <>
-              <Camera className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span className="hidden sm:inline">Camera Live</span>
-              <span className="text-[10px] text-emerald-600/80 font-mono ml-0.5">{fps} FPS</span>
-            </>
-          ) : cameraStatus === 'requesting' ? (
-            <>
-              <Camera className="w-3.5 h-3.5 text-amber-600 animate-spin shrink-0" />
-              <span className="hidden sm:inline">Starting...</span>
+              <Hand className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
+              <span>Hand Only</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
             </>
           ) : (
             <>
-              <CameraOff className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-              <span className="hidden xs:inline">Camera</span>
+              <Hand className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+              <span>Hand Only</span>
             </>
           )}
         </button>
-
-        {/* Hide Camera Video / Blank Area Trace Only Button */}
-        {cameraStatus === 'active' && (
-          <button
-            onClick={onToggleSkeletonOnly}
-            className={`px-2 py-1 sm:py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 transition-all ${
-              skeletonOnlyMode
-                ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300 font-semibold'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
-            }`}
-            title={skeletonOnlyMode ? 'Camera video is hidden (Traced in blank area) — Click to show video' : 'Hide camera video & trace hand only in blank area'}
-            aria-label="Toggle blank area hand trace only"
-          >
-            {skeletonOnlyMode ? <Eye className="w-3.5 h-3.5 text-indigo-600" /> : <EyeOff className="w-3.5 h-3.5 text-slate-500" />}
-            <span className="hidden md:inline">{skeletonOnlyMode ? 'Hand Only' : 'Hide Video'}</span>
-          </button>
-        )}
       </div>
 
-      {/* Action Controls */}
-      <div className="pointer-events-auto flex items-center gap-1 sm:gap-1.5 glass-panel p-1 sm:p-1.5 rounded-2xl shadow-sm shrink-0">
-        {/* Gesture Coach Toggle */}
+      {/* Workspace Actions */}
+      <div className="pointer-events-auto flex items-center gap-1 sm:gap-1.5 bg-white/90 backdrop-blur-md p-1.5 rounded-2xl shadow-sm border border-zinc-200/80 shrink-0">
+        {/* Gesture Coach Assistant Toggle */}
         <button
           onClick={onToggleCoach}
-          className={`p-2 rounded-xl transition-all ${
+          className={`p-2 rounded-xl text-xs font-medium transition-colors ${
             showGestureCoach
-              ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200'
-              : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+              ? 'bg-zinc-100 text-zinc-900'
+              : 'text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100/70'
           }`}
-          title={showGestureCoach ? 'Hide Gesture Coach tips' : 'Show Gesture Coach tips'}
+          title={showGestureCoach ? 'Hide Gesture Coach guidance' : 'Show Gesture Coach guidance'}
           aria-label="Toggle Gesture Coach"
         >
           <Compass className="w-4 h-4" />
         </button>
 
-        {/* Undo / Redo */}
+        {/* Undo */}
         <button
           onClick={onUndo}
           disabled={!canUndo}
-          className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 disabled:opacity-35 disabled:hover:bg-transparent transition-all"
+          className="p-2 rounded-xl text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
           title="Undo (Ctrl+Z)"
           aria-label="Undo"
         >
           <Undo2 className="w-4 h-4" />
         </button>
 
+        {/* Redo */}
         <button
           onClick={onRedo}
           disabled={!canRedo}
-          className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 disabled:opacity-35 disabled:hover:bg-transparent transition-all"
+          className="p-2 rounded-xl text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
           title="Redo (Ctrl+Y)"
           aria-label="Redo"
         >
           <Redo2 className="w-4 h-4" />
         </button>
 
-        <div className="h-4 w-[1px] bg-slate-200 my-1"></div>
-
         {/* Clear Canvas */}
         <button
           onClick={onClear}
-          className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-all"
+          className="p-2 rounded-xl text-zinc-600 hover:text-rose-600 hover:bg-rose-50 transition-colors"
           title="Clear Whiteboard"
           aria-label="Clear Whiteboard"
         >
           <Trash2 className="w-4 h-4" />
         </button>
 
-        {/* Export PNG */}
+        <div className="h-4 w-[1px] bg-zinc-200 my-1 mx-0.5"></div>
+
+        {/* Export CTA */}
         <button
           onClick={onExport}
-          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-all shadow-indigo-500/20"
-          title="Export as PNG"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold shadow-xs transition-colors"
+          title="Export board as high-res PNG"
           aria-label="Export PNG"
         >
           <Download className="w-3.5 h-3.5" />
-          <span className="hidden md:inline">Export</span>
+          <span className="hidden sm:inline">Export</span>
         </button>
 
-        <div className="h-4 w-[1px] bg-slate-200 my-1"></div>
+        <div className="h-4 w-[1px] bg-zinc-200 my-1 mx-0.5"></div>
 
         {/* Gesture Guide */}
         <button
           onClick={onOpenGuide}
-          className="p-2 rounded-xl text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
-          title="Hand Gesture Guide"
+          className="p-2 rounded-xl text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
+          title="Gestures Guide (1-finger Draw, Palm Erase)"
           aria-label="Gesture Guide"
         >
           <HelpCircle className="w-4 h-4" />
@@ -269,8 +191,8 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         {/* Settings */}
         <button
           onClick={onOpenSettings}
-          className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all"
-          title="Canvas & Tracking Settings"
+          className="p-2 rounded-xl text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
+          title="Preferences & Tracking Settings"
           aria-label="Settings"
         >
           <Settings className="w-4 h-4" />
@@ -279,7 +201,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         {/* Fullscreen */}
         <button
           onClick={onToggleFullscreen}
-          className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all hidden sm:flex"
+          className="p-2 rounded-xl text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors hidden sm:flex"
           title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
           aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
         >

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   classifyGesture,
   isFingerExtended,
+  isFingerFolded,
   GestureStabilizer,
   DEFAULT_THRESHOLDS,
   FingerAnalysis,
@@ -17,6 +18,11 @@ test('classifyGesture maps finger states accurately', () => {
     ring: false,
     pinky: false,
     thumb: false,
+    indexFolded: false,
+    middleFolded: true,
+    ringFolded: true,
+    pinkyFolded: true,
+    handScale: 0.2,
   };
   assert.equal(classifyGesture(drawFingers), 'draw');
 
@@ -27,8 +33,28 @@ test('classifyGesture maps finger states accurately', () => {
     ring: false,
     pinky: false,
     thumb: true,
+    indexFolded: false,
+    middleFolded: true,
+    ringFolded: true,
+    pinkyFolded: true,
+    handScale: 0.2,
   };
   assert.equal(classifyGesture(drawWithThumb), 'draw');
+
+  // Natural drawing grip: pinky slightly relaxed but middle & ring folded
+  const drawRelaxedPinky: FingerAnalysis = {
+    index: true,
+    middle: false,
+    ring: false,
+    pinky: false,
+    thumb: false,
+    indexFolded: false,
+    middleFolded: true,
+    ringFolded: true,
+    pinkyFolded: false,
+    handScale: 0.2,
+  };
+  assert.equal(classifyGesture(drawRelaxedPinky), 'draw');
 
   // Gesture B: Erase (all 4 main fingers extended)
   const eraseFingers: FingerAnalysis = {
@@ -37,6 +63,11 @@ test('classifyGesture maps finger states accurately', () => {
     ring: true,
     pinky: true,
     thumb: true,
+    indexFolded: false,
+    middleFolded: false,
+    ringFolded: false,
+    pinkyFolded: false,
+    handScale: 0.2,
   };
   assert.equal(classifyGesture(eraseFingers), 'erase');
 
@@ -47,6 +78,11 @@ test('classifyGesture maps finger states accurately', () => {
     ring: false,
     pinky: false,
     thumb: false,
+    indexFolded: true,
+    middleFolded: true,
+    ringFolded: true,
+    pinkyFolded: true,
+    handScale: 0.2,
   };
   assert.equal(classifyGesture(pauseFingers), 'pause');
 
@@ -57,6 +93,11 @@ test('classifyGesture maps finger states accurately', () => {
     ring: false,
     pinky: false,
     thumb: false,
+    indexFolded: false,
+    middleFolded: false,
+    ringFolded: true,
+    pinkyFolded: true,
+    handScale: 0.2,
   };
   assert.equal(classifyGesture(cursorFingers), 'cursor');
 
@@ -67,6 +108,11 @@ test('classifyGesture maps finger states accurately', () => {
     ring: false,
     pinky: true,
     thumb: false,
+    indexFolded: true,
+    middleFolded: false,
+    ringFolded: true,
+    pinkyFolded: false,
+    handScale: 0.2,
   };
   assert.equal(classifyGesture(invalidFingers), 'none');
 });
@@ -79,17 +125,28 @@ test('isFingerExtended detects extended vs curled finger coordinates', () => {
   const tipExtended: LandmarkPoint = { x: 0.5, y: 0.2, z: 0 };
   const tipCurled: LandmarkPoint = { x: 0.5, y: 0.55, z: 0 };
 
-  const extended = isFingerExtended(tipExtended, dip, pip, mcp, wrist, DEFAULT_THRESHOLDS);
+  const extended = isFingerExtended(tipExtended, dip, pip, mcp, wrist, DEFAULT_THRESHOLDS, 0.3);
   assert.equal(extended, true);
 
-  const curled = isFingerExtended(tipCurled, dip, pip, mcp, wrist, DEFAULT_THRESHOLDS);
+  const curled = isFingerExtended(tipCurled, dip, pip, mcp, wrist, DEFAULT_THRESHOLDS, 0.3);
   assert.equal(curled, false);
 });
 
-test('GestureStabilizer debounces rapid transitions', () => {
+test('isFingerFolded reliably flags curled finger', () => {
+  const wrist: LandmarkPoint = { x: 0.5, y: 0.9, z: 0 };
+  const mcp: LandmarkPoint = { x: 0.5, y: 0.6, z: 0 };
+  const pip: LandmarkPoint = { x: 0.5, y: 0.45, z: 0 };
+  const tipCurled: LandmarkPoint = { x: 0.5, y: 0.62, z: 0 }; // curled right next to palm
+
+  const folded = isFingerFolded(tipCurled, pip, mcp, wrist, 0.3);
+  assert.equal(folded, true);
+});
+
+test('GestureStabilizer debounces rapid transitions and provides active-stroke grace', () => {
   const stabilizer = new GestureStabilizer({
     ...DEFAULT_THRESHOLDS,
     debounceFrames: 2,
+    graceFrames: 2,
   });
 
   assert.equal(stabilizer.getCurrent(), 'none');
@@ -106,7 +163,15 @@ test('GestureStabilizer debounces rapid transitions', () => {
   const frame3 = stabilizer.process('draw');
   assert.equal(frame3, 'draw');
 
-  // Single glitch frame to none is ignored
+  // Single glitch frame to none is protected by grace period
   const glitch = stabilizer.process('none');
   assert.equal(glitch, 'draw');
+
+  // Second glitch frame still held
+  const glitch2 = stabilizer.process('none');
+  assert.equal(glitch2, 'draw');
+
+  // Third glitch frame releases to none
+  const glitch3 = stabilizer.process('none');
+  assert.equal(glitch3, 'none');
 });
