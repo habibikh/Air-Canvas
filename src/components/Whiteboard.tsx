@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 import {
   GridStyle,
   HandDetectionResult,
@@ -24,7 +24,7 @@ interface WhiteboardProps {
   onStrokeChange: () => void;
 }
 
-export const Whiteboard: React.FC<WhiteboardProps> = ({
+export const Whiteboard: React.FC<WhiteboardProps> = memo(({
   currentTool,
   brushColor,
   brushSize,
@@ -38,10 +38,14 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const cursorRef = useRef<HTMLDivElement | null>(null);
+
+  // Direct DOM cursor elements for 0 React re-renders during active drawing
+  const cursorWrapperRef = useRef<HTMLDivElement | null>(null);
+  const cursorGraphicRef = useRef<HTMLDivElement | null>(null);
+  const cursorTagRef = useRef<HTMLDivElement | null>(null);
   const trailSvgRef = useRef<SVGPolylineElement | null>(null);
 
-  // Keep latest props in refs to avoid closure stalls inside RAF callbacks
+  // Keep latest props in ref to avoid stale closures
   const propsRef = useRef({
     currentTool,
     brushColor,
@@ -73,19 +77,6 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
 
   // Mouse / Touch drawing state
   const isMouseDownRef = useRef<boolean>(false);
-
-  // Cursor state for smooth DOM rendering
-  const [cursorInfo, setCursorInfo] = useState<{
-    visible: boolean;
-    x: number;
-    y: number;
-    gesture: GestureType;
-  }>({
-    visible: false,
-    x: 0,
-    y: 0,
-    gesture: 'none',
-  });
 
   // Initialize Canvas DrawingEngine
   useEffect(() => {
@@ -122,6 +113,51 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
     }
   }, [gridStyle, engineRef]);
 
+  // Helper to update cursor visual appearance directly in DOM without React re-render
+  const updateCursorDOM = (gesture: GestureType, tool: StrokeTool, color: string, radius: number) => {
+    const wrapper = cursorWrapperRef.current;
+    const graphic = cursorGraphicRef.current;
+    const tag = cursorTagRef.current;
+    if (!wrapper || !graphic || !tag) return;
+
+    if (gesture === 'erase') {
+      graphic.className = 'rounded-full border-2 border-rose-500 bg-rose-500/15 animate-pulse shadow-lg shadow-rose-500/20';
+      graphic.style.width = `${radius}px`;
+      graphic.style.height = `${radius}px`;
+      graphic.style.backgroundColor = '';
+      graphic.innerHTML = '';
+      tag.textContent = `Erasing (${radius}px)`;
+    } else if (gesture === 'draw') {
+      graphic.className = 'w-4 h-4 rounded-full border-2 border-white shadow-md';
+      graphic.style.width = '16px';
+      graphic.style.height = '16px';
+      graphic.style.backgroundColor = color;
+      graphic.innerHTML = '';
+      tag.textContent = tool === 'highlighter' ? 'Highlighting' : 'Writing';
+    } else if (gesture === 'cursor') {
+      graphic.className = 'w-3.5 h-3.5 rounded-full bg-cyan-400 shadow-[0_0_10px_#22d3ee] border border-white';
+      graphic.style.width = '14px';
+      graphic.style.height = '14px';
+      graphic.style.backgroundColor = '';
+      graphic.innerHTML = '';
+      tag.textContent = 'Pointer';
+    } else if (gesture === 'pause') {
+      graphic.className = 'w-6 h-6 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center shadow-md';
+      graphic.style.width = '24px';
+      graphic.style.height = '24px';
+      graphic.style.backgroundColor = '';
+      graphic.innerHTML = '⏸';
+      tag.textContent = 'Paused';
+    } else {
+      graphic.className = 'w-3.5 h-3.5 rounded-full bg-slate-400/60 border border-white';
+      graphic.style.width = '14px';
+      graphic.style.height = '14px';
+      graphic.style.backgroundColor = '';
+      graphic.innerHTML = '';
+      tag.textContent = 'Hand Tracked';
+    }
+  };
+
   // Handle hand tracking frames for air drawing
   useEffect(() => {
     const unsubscribe = registerFrameListener((result) => {
@@ -141,6 +177,7 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
           isGestureErasingRef.current = false;
           pointFilterRef.current.reset();
           soundEffects.playDrawEnd();
+          engine.invalidateCache();
           engine.requestRender();
           onStrokeChange();
         }
@@ -150,16 +187,15 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
           trailSvgRef.current.setAttribute('points', '');
         }
 
-        setCursorInfo((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+        if (cursorWrapperRef.current) {
+          cursorWrapperRef.current.style.opacity = '0';
+        }
         return;
       }
 
       // Determine active landmark for cursor & drawing
       const rawTargetPoint = gesture === 'erase' && result.palmCenter ? result.palmCenter : result.indexTip;
-
-      if (!rawTargetPoint) {
-        return;
-      }
+      if (!rawTargetPoint) return;
 
       // Map to mirrored canvas coordinates
       const mapped = mapLandmarkToCanvas(rawTargetPoint, dims.width, dims.height, true);
@@ -169,27 +205,26 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
       const canvasX = smoothed.x * dims.width;
       const canvasY = smoothed.y * dims.height;
 
-      // Update kinetic trail
+      // Update kinetic trail directly on SVG DOM
       const trail = recentTrailPointsRef.current;
       trail.push({ x: canvasX, y: canvasY });
-      if (trail.length > 8) trail.shift();
+      if (trail.length > 6) trail.shift();
 
       if (trailSvgRef.current) {
-        const ptsStr = trail.map((p) => `${p.x},${p.y}`).join(' ');
+        const ptsStr = trail.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join(' ');
         trailSvgRef.current.setAttribute('points', ptsStr);
       }
 
-      // Update cursor position directly in DOM for 60fps performance
-      if (cursorRef.current) {
-        cursorRef.current.style.transform = `translate3d(${canvasX}px, ${canvasY}px, 0)`;
+      // Update cursor position directly via hardware-accelerated transform
+      if (cursorWrapperRef.current) {
+        cursorWrapperRef.current.style.transform = `translate3d(${canvasX}px, ${canvasY}px, 0)`;
+        cursorWrapperRef.current.style.opacity = '1';
       }
 
-      setCursorInfo({
-        visible: true,
-        x: canvasX,
-        y: canvasY,
-        gesture,
-      });
+      // Update cursor look when gesture changes
+      if (gesture !== lastGestureRef.current) {
+        updateCursorDOM(gesture, uiTool, color, radius);
+      }
 
       // Handle gesture state transitions:
       // 1. Gesture A: Drawing (Index finger extended)
@@ -197,9 +232,9 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
         if (isGestureErasingRef.current) {
           strokeHistory.endStroke();
           isGestureErasingRef.current = false;
+          engine.invalidateCache();
         }
 
-        // Use selected active tool (pen, highlighter, line, rectangle, circle)
         const activeTool = uiTool === 'eraser' ? 'pen' : uiTool;
 
         if (!isGestureDrawingRef.current) {
@@ -217,6 +252,7 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
           strokeHistory.endStroke();
           isGestureDrawingRef.current = false;
           soundEffects.playDrawEnd();
+          engine.invalidateCache();
         }
 
         if (!isGestureErasingRef.current) {
@@ -236,6 +272,7 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
           isGestureErasingRef.current = false;
           pointFilterRef.current.reset();
           soundEffects.playDrawEnd();
+          engine.invalidateCache();
           engine.requestRender();
           onStrokeChange();
         }
@@ -256,7 +293,11 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
     if (!canvas || !engine) return;
 
     isMouseDownRef.current = true;
-    canvas.setPointerCapture(e.pointerId);
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore
+    }
 
     const rect = canvas.getBoundingClientRect();
     const normX = (e.clientX - rect.left) / rect.width;
@@ -300,16 +341,11 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
     strokeHistory.endStroke();
     soundEffects.playDrawEnd();
     if (engineRef.current) {
+      engineRef.current.invalidateCache();
       engineRef.current.requestRender();
     }
     onStrokeChange();
   };
-
-  const cursorGesture = cursorInfo.gesture;
-  const isEraser = cursorGesture === 'erase';
-  const isPen = cursorGesture === 'draw';
-  const isPointer = cursorGesture === 'cursor';
-  const isPaused = cursorGesture === 'pause';
 
   return (
     <div
@@ -345,61 +381,25 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
         />
       </svg>
 
-      {/* Live Hand Gesture Tracking Cursor Reticle */}
-      {cursorInfo.visible && (
-        <div
-          ref={cursorRef}
-          className="absolute top-0 left-0 pointer-events-none transition-opacity duration-150 z-20"
-          style={{
-            transform: `translate3d(${cursorInfo.x}px, ${cursorInfo.y}px, 0)`,
-            willChange: 'transform',
-          }}
-        >
-          <div className="-translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-            {/* Cursor Graphic */}
-            {isEraser ? (
-              <div
-                className="rounded-full border-2 border-rose-500 bg-rose-500/15 animate-pulse shadow-lg shadow-rose-500/20"
-                style={{
-                  width: `${eraserRadius}px`,
-                  height: `${eraserRadius}px`,
-                }}
-              />
-            ) : isPen ? (
-              <div className="relative flex items-center justify-center">
-                <div
-                  className="w-4 h-4 rounded-full border-2 border-white shadow-md transition-colors"
-                  style={{ backgroundColor: brushColor }}
-                />
-                <div
-                  className="absolute w-8 h-8 rounded-full border border-indigo-400/60 animate-ping"
-                  style={{ animationDuration: '1.4s' }}
-                />
-              </div>
-            ) : isPointer ? (
-              <div className="relative flex items-center justify-center w-7 h-7">
-                <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_10px_#22d3ee]" />
-                <div className="absolute inset-0 rounded-full border-2 border-cyan-400/80 border-dashed animate-spin" style={{ animationDuration: '6s' }} />
-              </div>
-            ) : isPaused ? (
-              <div className="w-6 h-6 rounded-full bg-amber-500/90 border-2 border-white flex items-center justify-center text-xs text-white font-bold shadow-md">
-                ⏸
-              </div>
-            ) : (
-              <div className="w-3.5 h-3.5 rounded-full bg-slate-400/60 border border-white" />
-            )}
-
-            {/* Dynamic Gesture Feedback Tag */}
-            <div className="mt-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase backdrop-blur-md shadow-md border whitespace-nowrap bg-white/95 text-slate-800 border-slate-200">
-              {isPen && (currentTool === 'highlighter' ? 'Highlighting' : 'Writing')}
-              {isEraser && `Erasing (${eraserRadius}px)`}
-              {isPointer && 'Pointer'}
-              {isPaused && 'Paused'}
-              {!isPen && !isEraser && !isPointer && !isPaused && 'Hand Tracked'}
-            </div>
+      {/* Live Hand Gesture Tracking Cursor Reticle (Direct DOM manipulated for 0 React re-renders) */}
+      <div
+        ref={cursorWrapperRef}
+        className="absolute top-0 left-0 pointer-events-none z-20 transition-opacity duration-150"
+        style={{
+          opacity: 0,
+          willChange: 'transform',
+        }}
+      >
+        <div className="-translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+          <div ref={cursorGraphicRef} className="w-3.5 h-3.5 rounded-full bg-slate-400/60 border border-white" />
+          <div
+            ref={cursorTagRef}
+            className="mt-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase backdrop-blur-md shadow-md border whitespace-nowrap bg-white/95 text-slate-800 border-slate-200"
+          >
+            Hand Tracked
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
-};
+});

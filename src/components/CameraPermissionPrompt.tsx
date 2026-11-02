@@ -1,11 +1,12 @@
 import React from 'react';
-import { Camera, ShieldCheck, AlertCircle, RefreshCw, MousePointer, Sparkles, Hand } from 'lucide-react';
+import { Camera, ShieldCheck, AlertCircle, RefreshCw, MousePointer, Sparkles, Hand, Play } from 'lucide-react';
 import { CameraStatus } from '../types';
 
 interface CameraPermissionPromptProps {
   cameraStatus: CameraStatus;
   errorMessage: string | null;
   onStartCamera: () => void;
+  onStartDemo?: () => void;
   onDismiss: () => void;
 }
 
@@ -13,6 +14,7 @@ export const CameraPermissionPrompt: React.FC<CameraPermissionPromptProps> = ({
   cameraStatus,
   errorMessage,
   onStartCamera,
+  onStartDemo,
   onDismiss,
 }) => {
   const isDenied = cameraStatus === 'denied';
@@ -39,25 +41,31 @@ export const CameraPermissionPrompt: React.FC<CameraPermissionPromptProps> = ({
         {/* Title & Description */}
         {isDenied ? (
           <>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Camera Permission Blocked</h2>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Camera Permission Needed</h2>
             <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-              AirCanvas requires webcam access to track your index finger gestures in real time. Please click the camera/lock icon in your browser address bar to allow camera access.
+              AirCanvas uses client-side MediaPipe to track index finger drawing and palm erasing. Camera access was blocked by the browser.
             </p>
             <div className="mt-4 p-3 rounded-2xl bg-amber-50 border border-amber-200/80 text-left text-xs text-amber-800">
               <p className="font-semibold mb-1">How to enable:</p>
               <ol className="list-decimal list-inside space-y-1 text-[11px] text-amber-700">
-                <li>Click the lock or site settings icon next to the URL.</li>
+                <li>Click the camera or lock icon in your browser address bar.</li>
                 <li>Set <strong>Camera</strong> to <strong>Allow</strong>.</li>
-                <li>Click the <em>Retry Camera</em> button below.</li>
+                <li>Click <em>Retry Camera Connection</em> below.</li>
               </ol>
             </div>
           </>
         ) : isError ? (
           <>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Camera Initialization Error</h2>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Camera Device Not Found</h2>
             <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-              {errorMessage || 'Unable to connect to camera device. Ensure no other application is using your webcam.'}
+              {errorMessage || 'No camera was detected, or another program is currently using it.'}
             </p>
+            <div className="mt-3 p-3 rounded-2xl bg-indigo-50/80 border border-indigo-100 text-xs text-indigo-800 text-left">
+              <p className="font-semibold mb-0.5">Want to test right now?</p>
+              <p className="text-[11px] text-indigo-700">
+                You can try the <strong>Interactive Air Hand Demo</strong> to experience real-time gesture writing and palm erasing immediately!
+              </p>
+            </div>
           </>
         ) : (
           <>
@@ -88,12 +96,12 @@ export const CameraPermissionPrompt: React.FC<CameraPermissionPromptProps> = ({
           <button
             onClick={onStartCamera}
             disabled={isRequesting}
-            className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all"
+            className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
           >
             {isRequesting ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Initializing MediaPipe & Camera...</span>
+                <span>Connecting Camera & Model...</span>
               </>
             ) : isDenied || isError ? (
               <>
@@ -108,9 +116,19 @@ export const CameraPermissionPrompt: React.FC<CameraPermissionPromptProps> = ({
             )}
           </button>
 
+          {onStartDemo && (
+            <button
+              onClick={onStartDemo}
+              className="w-full py-2.5 px-4 rounded-xl bg-cyan-50 hover:bg-cyan-100/80 border border-cyan-200 text-cyan-900 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Play className="w-3.5 h-3.5 text-cyan-700" />
+              <span>Try Interactive Air Hand Demo</span>
+            </button>
+          )}
+
           <button
             onClick={onDismiss}
-            className="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+            className="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
           >
             <MousePointer className="w-3.5 h-3.5" />
             <span>Continue with Mouse & Touch Mode</span>

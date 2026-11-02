@@ -1,6 +1,6 @@
 /**
  * High-Performance MediaPipe Tasks Vision HandLandmarker integration service
- * Optimized for 30 - 50 FPS on both Mobile & PC
+ * Smooth 30 - 35 FPS tracking without main thread starvation
  */
 
 import { FilesetResolver, HandLandmarker, HandLandmarkerResult } from '@mediapipe/tasks-vision';
@@ -29,20 +29,24 @@ export class HandTrackingService {
   private isInitializing: boolean = false;
   private isRunning: boolean = false;
   private isProcessingFrame: boolean = false;
+  private isSimulating: boolean = false;
+  private simTimer: number | null = null;
+  private simAngle: number = 0;
   private videoElement: HTMLVideoElement | null = null;
   private stream: MediaStream | null = null;
   private animFrameId: number | null = null;
   private rvfcId: number | null = null;
   private lastFrameTimestamp: number = 0;
+  private lastInferenceTimestamp: number = 0;
   private stabilizer = new GestureStabilizer();
   private callbacks: Set<HandFrameCallback> = new Set();
   private statusCallback?: (status: CameraStatus, error?: string) => void;
 
-  // Frame rate control: user requested at least 30, max 50 FPS
-  private targetMaxFps: number = 50;
-  private minFrameIntervalMs: number = 1000 / 50; // 20ms cap
+  // Frame rate control: 30 - 35 FPS ideal for stable computer vision without lagging UI thread
+  private targetMaxFps: number = 35;
+  private minFrameIntervalMs: number = 1000 / 35; // ~28.5ms
 
-  // Rolling telemetry metrics for ultra-smooth FPS display
+  // Rolling telemetry metrics
   private frameCount: number = 0;
   private lastFpsTime: number = performance.now();
   private currentFps: number = 0;
@@ -50,7 +54,7 @@ export class HandTrackingService {
   constructor() {}
 
   public setTargetMaxFps(fps: number) {
-    this.targetMaxFps = Math.max(30, Math.min(50, fps));
+    this.targetMaxFps = Math.max(25, Math.min(45, fps));
     this.minFrameIntervalMs = 1000 / this.targetMaxFps;
   }
 
@@ -119,9 +123,18 @@ export class HandTrackingService {
   }
 
   /**
-   * Request webcam stream optimized for Mobile & PC with 30-50 FPS target
+   * Request webcam stream with graceful fallback
    */
   public async startCamera(videoEl: HTMLVideoElement): Promise<void> {
+    // If simulation was running, stop it
+    this.stopSimulation();
+
+    // Clean up any existing stream first
+    if (this.stream) {
+      this.stream.getTracks().forEach((t) => t.stop());
+      this.stream = null;
+    }
+
     this.videoElement = videoEl;
 
     if (this.statusCallback) {
@@ -137,14 +150,13 @@ export class HandTrackingService {
         (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
           (typeof window !== 'undefined' && window.innerWidth < 768));
 
-      // Constraints optimized for 30-50 FPS:
-      // Requesting 640x480 or 480x360 with ideal 60 min 30 fps
+      // Constraints optimized for 30 FPS without camera hardware stalls
       const constraints: MediaStreamConstraints = {
         video: {
           width: isMobile ? { ideal: 480, max: 640 } : { ideal: 640, max: 640 },
           height: isMobile ? { ideal: 360, max: 480 } : { ideal: 480, max: 480 },
           facingMode: 'user',
-          frameRate: { ideal: 50, min: 30, max: 60 },
+          frameRate: { ideal: 30, max: 45 },
         },
         audio: false,
       };
@@ -153,10 +165,9 @@ export class HandTrackingService {
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (strictErr) {
-        // Fallback for cameras that reject strict frameRate/resolution constraints
-        console.warn('Strict camera constraints rejected, using relaxed fallback:', strictErr);
+        // Fallback for cameras that reject specific constraint objects
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user' },
+          video: true,
           audio: false,
         });
       }
@@ -189,45 +200,44 @@ export class HandTrackingService {
   }
 
   /**
-   * High-frequency processing loop using requestVideoFrameCallback when available,
-   * with automatic fallback to requestAnimationFrame.
-   * Enforces target rate between 30 and 50 FPS.
+   * Smooth processing loop with rate limiter and monotonic timestamps
    */
   private startProcessingLoop() {
     const video = this.videoElement;
     if (!video) return;
 
-    // Check if browser supports requestVideoFrameCallback (Chrome, Edge, Opera, Safari 15.4+)
     const hasRVFC = typeof (video as unknown as { requestVideoFrameCallback?: Function }).requestVideoFrameCallback === 'function';
 
-    const processTick = (timestamp: number) => {
+    const processTick = () => {
       if (!this.isRunning) return;
 
       const now = performance.now();
       const elapsed = now - this.lastFrameTimestamp;
 
-      // Rate limiter: enforce max 50 FPS (min 20ms between frames)
+      // Rate limiter: ensure max 35 FPS to avoid UI lagging
       if (elapsed >= this.minFrameIntervalMs) {
         if (!this.isProcessingFrame && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && this.handLandmarker) {
           this.isProcessingFrame = true;
           this.lastFrameTimestamp = now;
 
-          // Update rolling FPS metric
+          // Rolling FPS metric
           this.frameCount++;
           if (now - this.lastFpsTime >= 500) {
             const rawFps = Math.round((this.frameCount * 1000) / (now - this.lastFpsTime));
-            // Clamp reported display FPS within user's target window
-            this.currentFps = Math.min(50, Math.max(1, rawFps));
+            this.currentFps = Math.min(35, Math.max(1, rawFps));
             this.frameCount = 0;
             this.lastFpsTime = now;
           }
 
           try {
-            // Run MediaPipe detection
-            const results = this.handLandmarker.detectForVideo(video, now);
+            // Strictly monotonic timestamp for MediaPipe Tasks Vision
+            const timestamp = Math.max(now, this.lastInferenceTimestamp + 1);
+            this.lastInferenceTimestamp = timestamp;
+
+            const results = this.handLandmarker.detectForVideo(video, timestamp);
             this.processDetectionResult(results);
           } catch (e) {
-            // Dropped frame
+            // Frame dropped or skipped
           } finally {
             this.isProcessingFrame = false;
           }
@@ -310,13 +320,84 @@ export class HandTrackingService {
   }
 
   public getFps(): number {
-    return this.currentFps;
+    return this.isSimulating ? 30 : this.currentFps;
+  }
+
+  /**
+   * Interactive Virtual Hand Simulator
+   * Allows testing index finger drawing and palm erasing without physical camera
+   */
+  public startDemoSimulation() {
+    this.stopCamera();
+    this.isSimulating = true;
+    this.simAngle = 0;
+
+    if (this.statusCallback) {
+      this.statusCallback('active');
+    }
+
+    const simLoop = () => {
+      if (!this.isSimulating) return;
+
+      this.simAngle += 0.035;
+      const angle = this.simAngle;
+
+      // Figure-8 parametric trajectory
+      const centerX = 0.5 + Math.sin(angle) * 0.22;
+      const centerY = 0.45 + (Math.sin(angle * 2) * 0.16);
+
+      // Periodically switch between draw (index) and erase (palm)
+      const cycle = Math.floor(angle / (Math.PI * 2)) % 4;
+      const gesture: GestureType = cycle === 3 ? 'erase' : 'draw';
+
+      // Construct synthetic 21-point hand skeleton centered on target
+      const landmarks: LandmarkPoint[] = [];
+      for (let i = 0; i < 21; i++) {
+        const offsetX = ((i % 5) - 2) * 0.015;
+        const offsetY = (Math.floor(i / 5) - 2) * 0.02;
+        landmarks.push({
+          x: Math.max(0.1, Math.min(0.9, centerX + offsetX)),
+          y: Math.max(0.1, Math.min(0.9, centerY + offsetY)),
+          z: 0,
+        });
+      }
+
+      const indexTip: LandmarkPoint = { x: centerX, y: centerY, z: 0 };
+      const palmCenter: LandmarkPoint = { x: centerX, y: centerY + 0.05, z: 0 };
+
+      const payload: HandDetectionResult = {
+        gesture,
+        confidence: 0.95,
+        indexTip,
+        palmCenter,
+        landmarks,
+        dominantHand: 'Right',
+      };
+
+      this.broadcastFrame(payload);
+      this.simTimer = window.setTimeout(simLoop, 33);
+    };
+
+    simLoop();
+  }
+
+  public stopSimulation() {
+    this.isSimulating = false;
+    if (this.simTimer !== null) {
+      clearTimeout(this.simTimer);
+      this.simTimer = null;
+    }
+  }
+
+  public isSimulationMode(): boolean {
+    return this.isSimulating;
   }
 
   /**
    * Stops video stream, cancels RAF / RVFC, and frees camera tracks
    */
   public stopCamera() {
+    this.stopSimulation();
     this.isRunning = false;
     this.isProcessingFrame = false;
 

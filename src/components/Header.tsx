@@ -43,7 +43,7 @@ interface HeaderProps {
   onOpenLogoPreview?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({
+export const Header: React.FC<HeaderProps> = React.memo(({
   cameraStatus,
   currentGesture,
   fps,
@@ -288,4 +288,4 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
     </header>
   );
-};
+});

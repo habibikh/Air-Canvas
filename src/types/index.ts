@@ -59,7 +59,7 @@ export interface CanvasSettings {
   autoConnectCamera: boolean;
   showGestureCoach: boolean;
   showCursorTrail: boolean;
-  targetFps: 30 | 45 | 50;
+  targetFps: 30 | 35 | 45 | 50;
   skeletonOnlyMode: boolean; // Hide camera video, trace hand only in blank/clean area
 }
 

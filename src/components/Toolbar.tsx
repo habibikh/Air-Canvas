@@ -62,7 +62,7 @@ export const GRID_OPTIONS: { label: string; style: GridStyle }[] = [
   { label: 'Blueprint', style: 'blueprint' },
 ];
 
-export const Toolbar: React.FC<ToolbarProps> = ({
+export const Toolbar: React.FC<ToolbarProps> = React.memo(({
   currentTool,
   brushColor,
   brushSize,
@@ -307,4 +307,4 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </div>
     </div>
   );
-};
+});

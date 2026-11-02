@@ -17,6 +17,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { ClearConfirmModal } from './components/ClearConfirmModal';
 import { LogoPreviewModal } from './components/LogoPreviewModal';
 import { CameraPermissionPrompt } from './components/CameraPermissionPrompt';
+import { ExportModal } from './components/ExportModal';
 import { GestureCoach } from './components/GestureCoach';
 import { ToastContainer } from './components/Toast';
 import { soundEffects } from './services/soundEffects';
@@ -37,7 +38,7 @@ const DEFAULT_SETTINGS: CanvasSettings = {
   autoConnectCamera: false,
   showGestureCoach: true,
   showCursorTrail: true,
-  targetFps: 50,
+  targetFps: 35,
   skeletonOnlyMode: false,
 };
 
@@ -58,7 +59,7 @@ export default function App() {
   // Sync target FPS to tracking service
   useEffect(() => {
     import('./services/handTrackingService').then(({ handTrackingService }) => {
-      handTrackingService.setTargetMaxFps(settings.targetFps || 50);
+      handTrackingService.setTargetMaxFps(settings.targetFps || 35);
     });
   }, [settings.targetFps]);
 
@@ -94,6 +95,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isClearModalOpen, setIsClearModalOpen] = useState<boolean>(false);
   const [isLogoPreviewOpen, setIsLogoPreviewOpen] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
   // Toast notifications state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -138,6 +140,7 @@ export default function App() {
     isHandDetected,
     dominantHand,
     startCamera,
+    startDemoSimulation,
     stopCamera,
     registerFrameListener,
   } = useHandTracking();
@@ -147,14 +150,25 @@ export default function App() {
     setCanRedo(strokeHistoryRef.current.canRedo());
   }, []);
 
-  // Handle camera start
+  // Handle camera start with error checking
   const handleStartCamera = useCallback(async () => {
     if (videoRef.current) {
-      await startCamera(videoRef.current);
-      setShowPrompt(false);
-      addToast('Camera Live', 'Index finger draws, open palm erases', 'success');
+      const res = await startCamera(videoRef.current);
+      if (res.success) {
+        setShowPrompt(false);
+        addToast('Camera Live', 'Index finger draws, open palm erases', 'success');
+      } else {
+        addToast('Camera Unavailable', res.error || 'Please connect a webcam or try Demo Mode', 'warning');
+      }
     }
   }, [startCamera, addToast]);
+
+  // Handle interactive demo simulation
+  const handleStartDemo = useCallback(() => {
+    startDemoSimulation();
+    setShowPrompt(false);
+    addToast('Interactive Demo Live', 'Simulating index-finger drawing and palm erasing cycle', 'info');
+  }, [startDemoSimulation, addToast]);
 
   const handleToggleCamera = useCallback(async () => {
     if (cameraStatus === 'active') {
@@ -162,8 +176,12 @@ export default function App() {
       addToast('Camera Inactive', 'Air tracking stopped. Mouse/touch is still active.', 'info');
     } else {
       if (videoRef.current) {
-        await startCamera(videoRef.current);
-        addToast('Camera Live', 'Gesture tracking active', 'success');
+        const res = await startCamera(videoRef.current);
+        if (res.success) {
+          addToast('Camera Live', 'Gesture tracking active', 'success');
+        } else {
+          addToast('Camera Unavailable', res.error || 'Check camera permissions or use Demo Mode', 'warning');
+        }
       }
     }
   }, [cameraStatus, startCamera, stopCamera, addToast]);
@@ -173,6 +191,7 @@ export default function App() {
     const undone = strokeHistoryRef.current.undo();
     if (undone) {
       soundEffects.playPop();
+      engineRef.current?.invalidateCache();
       engineRef.current?.requestRender();
       syncUndoRedo();
       addToast('Undo', 'Removed last stroke', 'info');
@@ -183,6 +202,7 @@ export default function App() {
     const redone = strokeHistoryRef.current.redo();
     if (redone) {
       soundEffects.playPop();
+      engineRef.current?.invalidateCache();
       engineRef.current?.requestRender();
       syncUndoRedo();
       addToast('Redo', 'Restored stroke', 'info');
@@ -193,20 +213,18 @@ export default function App() {
   const handleConfirmClear = useCallback(() => {
     strokeHistoryRef.current.clear();
     soundEffects.playPop();
+    engineRef.current?.invalidateCache();
     engineRef.current?.requestRender();
     syncUndoRedo();
     setIsClearModalOpen(false);
     addToast('Whiteboard Cleared', 'Press Ctrl+Z if you want to undo', 'warning');
   }, [syncUndoRedo, addToast]);
 
-  // Export PNG
-  const handleExportPNG = useCallback(() => {
-    if (engineRef.current) {
-      soundEffects.playPop();
-      engineRef.current.downloadPNG();
-      addToast('Canvas Exported', 'Downloaded high-resolution PNG', 'success');
-    }
-  }, [addToast]);
+  // Open Export Modal
+  const handleOpenExport = useCallback(() => {
+    soundEffects.playPop();
+    setIsExportModalOpen(true);
+  }, []);
 
   // Audio Toggle
   const handleToggleSound = useCallback(() => {
@@ -305,7 +323,7 @@ export default function App() {
         onUndo={handleUndo}
         onRedo={handleRedo}
         onClear={() => setIsClearModalOpen(true)}
-        onExport={handleExportPNG}
+        onExport={handleOpenExport}
         onToggleFullscreen={handleToggleFullscreen}
         onOpenGuide={() => setIsGuideOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
@@ -387,6 +405,7 @@ export default function App() {
           cameraStatus={cameraStatus}
           errorMessage={errorMessage}
           onStartCamera={handleStartCamera}
+          onStartDemo={handleStartDemo}
           onDismiss={() => setShowPrompt(false)}
         />
       )}
@@ -418,6 +437,14 @@ export default function App() {
         isOpen={isLogoPreviewOpen}
         onClose={() => setIsLogoPreviewOpen(false)}
         onNotify={(msg) => addToast('Logo Asset', msg, 'success')}
+      />
+
+      {/* Export Canvas Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        engine={engineRef.current}
+        onNotify={(msg, type) => addToast('Export Canvas', msg, type)}
       />
     </div>
   );
