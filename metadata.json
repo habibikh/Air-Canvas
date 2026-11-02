@@ -1,0 +1,6 @@
+{
+  "name": "AirCanvas",
+  "description": "Full-Stack-Ready AI Gesture Whiteboard Web Application with real-time hand tracking and air-drawing.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

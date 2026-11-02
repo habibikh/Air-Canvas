@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'Geist Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    user-select: none;
+    -webkit-user-select: none;
+    background-color: #fbf8fc;
+    color: #1b1b1e;
+  }
+}
+
+/* Glassmorphism helpers matching Stitch design */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+}
+
+.glass-panel-elevated {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(79, 70, 229, 0.2);
+  box-shadow: 0 12px 32px -4px rgba(79, 70, 229, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+}
+
+.glass-modal {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.18);
+}
+
+/* Dot grid canvas background */
+.bg-dot-grid {
+  background-image: radial-gradient(#e2e8f0 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+}
+
+/* Tabular figures for metrics */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

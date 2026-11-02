@@ -1,0 +1,243 @@
+---
+name: AirCanvas
+colors:
+  surface: '#fbf8fc'
+  surface-dim: '#dcd9dd'
+  surface-bright: '#fbf8fc'
+  surface-container-lowest: '#ffffff'
+  surface-container-low: '#f6f2f7'
+  surface-container: '#f0edf1'
+  surface-container-high: '#eae7eb'
+  surface-container-highest: '#e4e1e6'
+  on-surface: '#1b1b1e'
+  on-surface-variant: '#464555'
+  inverse-surface: '#303033'
+  inverse-on-surface: '#f3f0f4'
+  outline: '#777587'
+  outline-variant: '#c7c4d8'
+  surface-tint: '#4d44e3'
+  primary: '#3525cd'
+  on-primary: '#ffffff'
+  primary-container: '#4f46e5'
+  on-primary-container: '#dad7ff'
+  inverse-primary: '#c3c0ff'
+  secondary: '#00687a'
+  on-secondary: '#ffffff'
+  secondary-container: '#57dffe'
+  on-secondary-container: '#006172'
+  tertiary: '#6b00b7'
+  on-tertiary: '#ffffff'
+  tertiary-container: '#862dd4'
+  on-tertiary-container: '#ebd2ff'
+  error: '#ba1a1a'
+  on-error: '#ffffff'
+  error-container: '#ffdad6'
+  on-error-container: '#93000a'
+  primary-fixed: '#e2dfff'
+  primary-fixed-dim: '#c3c0ff'
+  on-primary-fixed: '#0f0069'
+  on-primary-fixed-variant: '#3323cc'
+  secondary-fixed: '#acedff'
+  secondary-fixed-dim: '#4cd7f6'
+  on-secondary-fixed: '#001f26'
+  on-secondary-fixed-variant: '#004e5c'
+  tertiary-fixed: '#f0dbff'
+  tertiary-fixed-dim: '#ddb7ff'
+  on-tertiary-fixed: '#2c0051'
+  on-tertiary-fixed-variant: '#6900b3'
+  background: '#fbf8fc'
+  on-background: '#1b1b1e'
+  surface-variant: '#e4e1e6'
+typography:
+  headline-xl:
+    fontFamily: Geist
+    fontSize: 40px
+    fontWeight: '600'
+    lineHeight: 48px
+    letterSpacing: -0.02em
+  headline-xl-mobile:
+    fontFamily: Geist
+    fontSize: 30px
+    fontWeight: '600'
+    lineHeight: 38px
+    letterSpacing: -0.02em
+  headline-lg:
+    fontFamily: Geist
+    fontSize: 32px
+    fontWeight: '600'
+    lineHeight: 40px
+    letterSpacing: -0.02em
+  headline-lg-mobile:
+    fontFamily: Geist
+    fontSize: 24px
+    fontWeight: '600'
+    lineHeight: 32px
+    letterSpacing: -0.015em
+  headline-md:
+    fontFamily: Geist
+    fontSize: 24px
+    fontWeight: '500'
+    lineHeight: 32px
+    letterSpacing: -0.015em
+  headline-sm:
+    fontFamily: Geist
+    fontSize: 20px
+    fontWeight: '500'
+    lineHeight: 28px
+    letterSpacing: -0.01em
+  body-lg:
+    fontFamily: Geist
+    fontSize: 16px
+    fontWeight: '400'
+    lineHeight: 24px
+    letterSpacing: -0.005em
+  body-md:
+    fontFamily: Geist
+    fontSize: 14px
+    fontWeight: '400'
+    lineHeight: 20px
+    letterSpacing: 0em
+  body-sm:
+    fontFamily: Geist
+    fontSize: 12px
+    fontWeight: '400'
+    lineHeight: 16px
+    letterSpacing: 0.005em
+  label-lg:
+    fontFamily: Geist
+    fontSize: 14px
+    fontWeight: '500'
+    lineHeight: 20px
+    letterSpacing: 0em
+  label-md:
+    fontFamily: Geist
+    fontSize: 12px
+    fontWeight: '500'
+    lineHeight: 16px
+    letterSpacing: 0.01em
+  label-sm:
+    fontFamily: Geist
+    fontSize: 11px
+    fontWeight: '600'
+    lineHeight: 14px
+    letterSpacing: 0.02em
+  code-sm:
+    fontFamily: Geist
+    fontSize: 12px
+    fontWeight: '400'
+    lineHeight: 16px
+    letterSpacing: 0em
+rounded:
+  sm: 0.25rem
+  DEFAULT: 0.5rem
+  md: 0.75rem
+  lg: 1rem
+  xl: 1.5rem
+  full: 9999px
+spacing:
+  gutter: 1rem
+  gutter-mobile: 0.75rem
+  margin: 1.5rem
+  margin-mobile: 1rem
+  space-xs: 0.25rem
+  space-sm: 0.5rem
+  space-md: 0.75rem
+  space-lg: 1rem
+  space-xl: 1.5rem
+  space-2xl: 2rem
+  space-3xl: 3rem
+---
+
+## Brand & Style
+
+This design system defines an intuitive, forward-looking visual environment tailored for touchless spatial creation and AI-driven ideation. It translates ephemeral physical gestures into crisp, tactile digital actions. The product personality balances precision SaaS utility with ambient, weightless fluidity—evoking feelings of wonder, frictionless agency, and creative mastery.
+
+The visual style synthesizes modern architectural minimalism with refined frosted glassmorphism and luminous cybernetic accents:
+- **Atmospheric Clarity**: The infinite canvas acts as a physical drafting surface, utilizing warm-neutral undertones rather than sterile digital whites to reduce cognitive fatigue during prolonged creative sessions.
+- **Glassmorphic Floating Chrome**: Controls hover effortlessly above the canvas using translucent optical surfaces, fine specular borders, and high-diffusion backdrops that preserve spatial context beneath menus.
+- **Luminescent AI Feedback**: Real-time camera landmark recognition and gesture trackers utilize spectral glows (electric violet, radiant cyan) that feel alive and responsive, signaling machine perception with grace rather than visual noise.
+
+## Colors
+
+The palette balances clinical precision with vibrant kinetic feedback:
+- **Primary (`#4F46E5` / `#6366F1`)**: Electric Indigo anchors operational focus—used for active drawing instruments, primary call-to-actions, and confirmed gesture captures.
+- **Secondary (`#06B6D4` / `#38BDF8`)**: Soft Cyan / Aqua drives dynamic system feedback, including real-time hand skeleton trackers, pinch vector lines, and spatial depth coordinates.
+- **Tertiary (`#A855F7` / `#C084FC`)**: Soft Lavender Glow indicates background AI synthesis, smart shape auto-completions, and neural text recognizers.
+- **Canvas Neutrals (`#FBFBFA` surface, `#18181B` text)**: The primary canvas is rendered in `#FBFBFA` with dot grids tinted in `#E2E8F0`. High-emphasis typography utilizes deep zinc (`#18181B`), while secondary metadata uses `#71717A`.
+- **Surface Accents**: Overlay glass panels use `rgba(255, 255, 255, 0.82)` with edge highlights at `rgba(255, 255, 255, 0.95)` and borders at `#E2E8F0`.
+
+## Typography
+
+The typography leverages **Geist** across all roles to achieve a technical, monoline aesthetic suited for spatial mapping coordinates, vector tools, and minimalist workspace chrome.
+
+- **Numerals & Metrics**: All viewport coordinates, gesture confidence ratios, and brush sizes take advantage of Geist's tabular geometric figures for zero-shift layout stability.
+- **Hierarchical Discipline**: Canvas controls favor compact, high-contrast labels (`label-md` and `label-sm`) with deliberate tracking to ensure total legibility against translucent glass or varied drawn content.
+- **Headings & Canvas Modals**: Titles maintain tight negative tracking (`-0.02em`) to echo modern editorial tool design.
+
+## Layout & Spacing
+
+This design system uses a flexible spatial canvas model:
+- **Base Rhythm**: A strict 4px / 8px baseline informs all spatial relationships.
+- **Viewport Layout**: An edge-to-edge root canvas (`100vw` × `100vh`) serves as the viewport backdrop, upon which floating UI satellites anchor to safe viewports:
+  - **Docked Canvas Toolbar**: Centered horizontally at the bottom with a 24px baseline margin.
+  - **Vision HUD**: Anchored to the top-right corner with a 20px margin, holding the live tracking preview and telemetry.
+  - **Property Shelf**: Floating contextual inspector docked to the left edge or following hand selection clusters.
+- **Responsive Adaptations**: On mobile/tablets, toolbars collapse into swipeable bottom trays, and camera previews contract into a 48px circular HUD indicator that expands on tap.
+
+## Elevation & Depth
+
+Visual hierarchy uses frosted glassmorphism paired with multi-tiered ambient shadows to mimic weightless optical layers:
+
+- **Level 0 (Canvas Board)**: Flat `#FBFBFA` surface with an optional 24px interval SVG dot-grid (`#E2E8F0`).
+- **Level 1 (Docked Toolbars & Floating Palettes)**:
+  - Background: `rgba(255, 255, 255, 0.85)`
+  - Backdrop Filter: `blur(16px) saturate(180%)`
+  - Border: `1px solid rgba(226, 232, 240, 0.8)`
+  - Shadow: `0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04)`
+- **Level 2 (Active Gesture Pills & Context Flyouts)**:
+  - Background: `rgba(255, 255, 255, 0.95)`
+  - Backdrop Filter: `blur(24px)`
+  - Border: `1px solid rgba(79, 70, 229, 0.2)`
+  - Shadow: `0 12px 32px -4px rgba(79, 70, 229, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.08)`
+- **Level 3 (Modal Dialogs & Command Bar)**:
+  - Background: `#FFFFFF`
+  - Border: `1px solid #E2E8F0`
+  - Shadow: `0 24px 48px -12px rgba(15, 23, 42, 0.18)`
+- **Spatial HUD Glows**: Camera landmark dots and gesture rays emit dynamic box-shadow luminescence: `0 0 12px rgba(6, 182, 212, 0.5)` for tracking, and `0 0 16px rgba(99, 102, 241, 0.65)` on active pinch-draw engagement.
+
+## Shapes
+
+The interface balances organic, human hand movements with geometric discipline using roundedness level `2`:
+- **Controls & Tool Items**: Standard action items, color swatches, and inputs utilize `0.5rem` (8px) corner radii.
+- **Floating Panels & Cards**: Tool docks, inspection panels, and gesture HUD windows feature `1rem` (16px) corner radii (`rounded-lg`).
+- **Pills & Status Indicators**: Dynamic gesture feedback toasts, cursor trail badges, and mode pills use full pill shaping (`9999px`) to communicate lightweight fluidity.
+- **Stroke Metaphor**: All iconography and HUD reticles adhere to a 1.5px or 2px consistent stroke weight with rounded caps and joins.
+
+## Components
+
+### Buttons & Tool Controls
+- **Canvas Tool Button**: 40×40px square with 8px radius. Default state is transparent with 1.5px stroke icons in `#52525B`. Hover triggers `rgba(0, 0, 0, 0.04)`. Active tool switches to solid `#4F46E5` with `#FFFFFF` icon, accompanied by a subtle `0 0 10px rgba(79, 70, 229, 0.35)` glow.
+- **Primary Action Button**: High-emphasis action with `#4F46E5` background, white typography, 8px radius, and 12px vertical padding. Smooth hover transition to `#4338CA`.
+- **Ghost/Tertiary Button**: Subtle glass button with `rgba(255, 255, 255, 0.6)` surface and thin border (`#E2E8F0`).
+
+### Gesture Feedback Pill
+- Pill-shaped dynamic floating badge (`rounded-full`) positioned near the user's active cursor or hand anchor.
+- Features a pulsing 6px status dot (Cyan for tracking, Indigo for drawing, Lavender for AI recognizing) alongside concise uppercase typography (`label-sm`).
+- Border contains an animated gradient shimmer when an AI shape recognition event successfully triggers.
+
+### Web camera & Landmark HUD
+- Floating card (`rounded-lg`) in the top right. Displays a low-opacity mirror feed with vector wireframe hand landmark overlays.
+- Landmarks rendered as 3px dots (`#06B6D4`) with 1.5px connecting vectors (`rgba(6, 182, 212, 0.4)`). Pinch triggers scale transition to 5px Electric Indigo (`#6366F1`).
+- Includes tracking confidence and FPS metrics styled in `code-sm`.
+
+### Input Fields & Sliders
+- **Numeric & Stroke Inputs**: Compact 32px height, frosted surface, `#E2E8F0` border, focusing to `#4F46E5` with a 2px outer glow ring (`rgba(79, 70, 229, 0.2)`).
+- **Brush Weight Slider**: Minimalist 4px track (`#E2E8F0`) with a 14px circular thumb (`#4F46E5`) with an active radial aura on hand hover.
+
+### Floating Docked Toolbar
+- Horizontally aligned cluster of tool segments separated by 1px vertical dividers (`#E2E8F0`).
+- Divided into: Tool Mode (Pen, Eraser, Shape, Select), Color/Stroke Palette, Gesture AI Shortcuts, and Canvas Undo/Redo.
+- Frosted glass finish ensures full visibility of canvas drawings passing underneath.
+
+### Checkboxes & Toggle Switches
+- **Toggle Switch**: 36×20px capsule track. Active state uses `#4F46E5` with a smooth 16px white ball sliding inside. Subtle bounce transition mimics physical spatial triggers.
