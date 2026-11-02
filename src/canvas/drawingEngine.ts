@@ -38,6 +38,11 @@ export class DrawingEngine {
   private scratchCanvas: HTMLCanvasElement;
   private scratchCtx: CanvasRenderingContext2D;
 
+  // 4. Pre-composited background + ink layer for single-blit 60 FPS drawing
+  private compositeCanvas: HTMLCanvasElement;
+  private compositeCtx: CanvasRenderingContext2D;
+  private isCompositeDirty: boolean = true;
+
   constructor(canvas: HTMLCanvasElement, history: StrokeHistory) {
     this.canvas = canvas;
     const context = canvas.getContext('2d', { willReadFrequently: false, alpha: false });
@@ -65,6 +70,12 @@ export class DrawingEngine {
     if (!scratch) throw new Error('Scratch canvas 2D context not available');
     this.scratchCtx = scratch;
 
+    // Composite canvas for 1-blit render during active drawing
+    this.compositeCanvas = document.createElement('canvas');
+    const comp = this.compositeCanvas.getContext('2d', { willReadFrequently: false, alpha: false });
+    if (!comp) throw new Error('Composite canvas 2D context not available');
+    this.compositeCtx = comp;
+
     this.handleResize();
   }
 
@@ -72,12 +83,14 @@ export class DrawingEngine {
     if (this.gridStyle !== style) {
       this.gridStyle = style;
       this.isBgDirty = true;
+      this.isCompositeDirty = true;
       this.requestRender();
     }
   }
 
   public invalidateCache() {
     this.isInkDirty = true;
+    this.isCompositeDirty = true;
     this.requestRender();
   }
 
@@ -88,7 +101,13 @@ export class DrawingEngine {
 
     if (clientWidth <= 0 || clientHeight <= 0) return;
 
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2); // Cap at 2x for smooth 60fps performance
+    const isMobile =
+      typeof navigator !== 'undefined' &&
+      (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        clientWidth < 768);
+
+    // DPR capped at 1.5x (1.25x on mobile) for razor-sharp visuals while cutting memory by 50-60%
+    this.dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.25 : 1.5);
     this.width = clientWidth;
     this.height = clientHeight;
 
@@ -109,8 +128,12 @@ export class DrawingEngine {
     this.scratchCanvas.width = scaledW;
     this.scratchCanvas.height = scaledH;
 
+    this.compositeCanvas.width = scaledW;
+    this.compositeCanvas.height = scaledH;
+
     this.isBgDirty = true;
     this.isInkDirty = true;
+    this.isCompositeDirty = true;
     this.requestRender();
   }
 
@@ -137,6 +160,7 @@ export class DrawingEngine {
     ctx.restore();
 
     this.isBgDirty = false;
+    this.isCompositeDirty = true;
   }
 
   /**
@@ -162,13 +186,23 @@ export class DrawingEngine {
 
     ctx.restore();
     this.isInkDirty = false;
+    this.isCompositeDirty = true;
   }
 
   /**
-   * High-speed composite render:
-   * 1. Draw cached background
-   * 2. Composite cached ink layer
-   * 3. Render active stroke in progress
+   * Merges background and committed ink onto compositeCanvas
+   * Done only when background or committed ink changes, NEVER on active stroke frames!
+   */
+  private rebuildComposite() {
+    this.compositeCtx.drawImage(this.bgCanvas, 0, 0);
+    this.compositeCtx.drawImage(this.inkCanvas, 0, 0);
+    this.isCompositeDirty = false;
+  }
+
+  /**
+   * Ultra-fast 60 FPS composite render:
+   * 1. 1 GPU blit of pre-composited (background + ink) canvas
+   * 2. Render only the active stroke currently in progress
    */
   public render() {
     const { ctx, dpr, width, height } = this;
@@ -180,18 +214,20 @@ export class DrawingEngine {
     if (this.isInkDirty) {
       this.rebuildInk();
     }
-
-    // 1. Draw background onto main canvas
-    ctx.drawImage(this.bgCanvas, 0, 0);
+    if (this.isCompositeDirty) {
+      this.rebuildComposite();
+    }
 
     const activeStroke = this.history.getActiveStroke();
 
-    // 2. Composite ink and active stroke
+    // 1. Single GPU blit of pre-composited canvas (no active stroke)
     if (!activeStroke) {
-      // Direct fast blit of ink layer
-      ctx.drawImage(this.inkCanvas, 0, 0);
-    } else if (activeStroke.tool === 'eraser') {
-      // Active stroke is an eraser: copy committed ink to scratch, apply eraser, blit
+      ctx.drawImage(this.compositeCanvas, 0, 0);
+      return;
+    }
+
+    // 2. Active stroke is an eraser: apply onto scratch and composite
+    if (activeStroke.tool === 'eraser') {
       const sCtx = this.scratchCtx;
       sCtx.clearRect(0, 0, this.scratchCanvas.width, this.scratchCanvas.height);
       sCtx.drawImage(this.inkCanvas, 0, 0);
@@ -201,17 +237,19 @@ export class DrawingEngine {
       this.renderStroke(sCtx, activeStroke, width, height);
       sCtx.restore();
 
+      ctx.drawImage(this.bgCanvas, 0, 0);
       ctx.drawImage(this.scratchCanvas, 0, 0);
-    } else {
-      // Active stroke is a drawing tool (pen/highlighter/shape):
-      // Blit committed ink first, then draw active stroke directly onto main canvas
-      ctx.drawImage(this.inkCanvas, 0, 0);
-
-      ctx.save();
-      ctx.scale(dpr, dpr);
-      this.renderStroke(ctx, activeStroke, width, height);
-      ctx.restore();
+      return;
     }
+
+    // 3. Active stroke is a drawing tool (pen/highlighter/shape):
+    // Single blit of composite canvas + draw active stroke on top!
+    ctx.drawImage(this.compositeCanvas, 0, 0);
+
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    this.renderStroke(ctx, activeStroke, width, height);
+    ctx.restore();
   }
 
   /**
@@ -462,20 +500,22 @@ export class DrawingEngine {
 
     // Step 3: Draw background (if not transparent)
     if (!transparentBackground) {
-      if (this.gridStyle === 'blueprint') {
-        finalCtx.fillStyle = '#1e293b';
-        finalCtx.fillRect(0, 0, exportWidth, exportHeight);
-      } else if (this.gridStyle === 'ruled') {
-        finalCtx.fillStyle = '#fdfbf7';
-        finalCtx.fillRect(0, 0, exportWidth, exportHeight);
+      if (includeGrid) {
+        if (this.gridStyle === 'blueprint') {
+          finalCtx.fillStyle = '#1e293b';
+          finalCtx.fillRect(0, 0, exportWidth, exportHeight);
+        } else if (this.gridStyle === 'ruled') {
+          finalCtx.fillStyle = '#fdfbf7';
+          finalCtx.fillRect(0, 0, exportWidth, exportHeight);
+        } else {
+          finalCtx.fillStyle = '#ffffff';
+          finalCtx.fillRect(0, 0, exportWidth, exportHeight);
+        }
+        this.drawBackgroundGrid(finalCtx, exportWidth, exportHeight, this.gridStyle);
       } else {
-        // Pristine solid white background
+        // Pristine solid white canvas background
         finalCtx.fillStyle = '#ffffff';
         finalCtx.fillRect(0, 0, exportWidth, exportHeight);
-      }
-
-      if (includeGrid) {
-        this.drawBackgroundGrid(finalCtx, exportWidth, exportHeight, this.gridStyle);
       }
     }
 

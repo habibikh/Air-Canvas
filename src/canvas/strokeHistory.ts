@@ -57,7 +57,7 @@ export class StrokeHistory {
     // Filter duplicate or micro-distance points (< 0.001 normalized distance) to avoid redundant vertices
     if (lastPoint) {
       const dist = Math.hypot(normX - lastPoint.x, normY - lastPoint.y);
-      if (dist < 0.0005) {
+      if (dist < 0.001) {
         return false;
       }
     }

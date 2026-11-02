@@ -21,6 +21,14 @@ export const GestureCoach: React.FC<GestureCoachProps> = ({
 
   const getCoachMessage = () => {
     if (cameraStatus !== 'active') {
+      if (cameraStatus === 'denied') {
+        return {
+          icon: '🛡️',
+          title: 'Mouse & Touch Mode Active',
+          subtitle: 'Camera access is blocked in browser settings. You can draw freely with mouse/touch or retry permissions.',
+          accent: 'border-amber-200 bg-amber-50/95 text-amber-900',
+        };
+      }
       return {
         icon: '🖱️',
         title: 'Mouse & Touch Ready',

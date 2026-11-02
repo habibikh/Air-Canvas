@@ -24,11 +24,11 @@ export class PointFilter {
   private getFactorForLevel(level: 'low' | 'medium' | 'high'): number {
     switch (level) {
       case 'low':
-        return 0.75; // Snappier, less smoothing
+        return 0.90; // Instantaneous, near zero latency
       case 'medium':
-        return 0.55; // Balanced
+        return 0.78; // Natural, highly responsive with micro-jitter rejection
       case 'high':
-        return 0.35; // Very smooth, slightly more drag
+        return 0.58; // Stabilized calligraphy
     }
   }
 
@@ -39,13 +39,13 @@ export class PointFilter {
       return { x: rawX, y: rawY };
     }
 
-    // Adaptive smoothing: if distance is very large (e.g., fast flick), increase factor to catch up
     const dx = rawX - this.lastX;
     const dy = rawY - this.lastY;
     const dist = Math.hypot(dx, dy);
 
-    // Boost responsiveness during fast movements
-    const dynamicFactor = Math.min(1.0, this.smoothingFactor + Math.min(0.4, dist * 2.0));
+    // If movement is larger than slight micro-tremor, follow quickly without lag
+    const velocityBoost = dist > 0.003 ? Math.min(0.35, dist * 10.0) : 0;
+    const dynamicFactor = Math.min(1.0, this.smoothingFactor + velocityBoost);
 
     const smoothedX = this.lastX + dx * dynamicFactor;
     const smoothedY = this.lastY + dy * dynamicFactor;

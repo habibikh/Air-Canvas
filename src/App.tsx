@@ -158,7 +158,11 @@ export default function App() {
         setShowPrompt(false);
         addToast('Camera Live', 'Index finger draws, open palm erases', 'success');
       } else {
-        addToast('Camera Unavailable', res.error || 'Please connect a webcam or try Demo Mode', 'warning');
+        if (res.isDenied) {
+          addToast('Camera Blocked', 'Allow camera in browser address bar, or draw with mouse/touch', 'info');
+        } else {
+          addToast('Camera Unavailable', res.error || 'Please connect a webcam or try Demo Mode', 'warning');
+        }
       }
     }
   }, [startCamera, addToast]);
@@ -180,7 +184,11 @@ export default function App() {
         if (res.success) {
           addToast('Camera Live', 'Gesture tracking active', 'success');
         } else {
-          addToast('Camera Unavailable', res.error || 'Check camera permissions or use Demo Mode', 'warning');
+          if (res.isDenied) {
+            addToast('Camera Blocked', 'Click the lock icon in your address bar to allow camera.', 'info');
+          } else {
+            addToast('Camera Unavailable', res.error || 'Check camera permissions or use Demo Mode', 'warning');
+          }
         }
       }
     }
@@ -303,6 +311,40 @@ export default function App() {
     );
   }, [settings.skeletonOnlyMode, updateSettings, addToast]);
 
+  // Memoized handlers for Toolbar & Header to avoid React re-render thrashing
+  const handleSelectTool = useCallback((tool: StrokeTool) => {
+    setCurrentTool(tool);
+    soundEffects.playPop();
+  }, []);
+
+  const handleSelectColor = useCallback((color: string) => {
+    updateSettings({ brushColor: color });
+    soundEffects.playPop();
+  }, [updateSettings]);
+
+  const handleSelectBrushSize = useCallback((size: number) => {
+    updateSettings({ brushSize: size });
+  }, [updateSettings]);
+
+  const handleSelectEraserRadius = useCallback((radius: number) => {
+    updateSettings({ eraserRadius: radius });
+  }, [updateSettings]);
+
+  const handleSelectGridStyle = useCallback((style: GridStyle) => {
+    updateSettings({ gridStyle: style });
+    soundEffects.playPop();
+    addToast('Background Updated', `Switched to ${style}`, 'info');
+  }, [updateSettings, addToast]);
+
+  const handleToggleCoach = useCallback(() => {
+    updateSettings({ showGestureCoach: !settings.showGestureCoach });
+  }, [settings.showGestureCoach, updateSettings]);
+
+  const handleOpenClearModal = useCallback(() => setIsClearModalOpen(true), []);
+  const handleOpenGuideModal = useCallback(() => setIsGuideOpen(true), []);
+  const handleOpenSettingsModal = useCallback(() => setIsSettingsOpen(true), []);
+  const handleOpenLogoModal = useCallback(() => setIsLogoPreviewOpen(true), []);
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#fbf8fc] text-[#1b1b1e]">
       {/* Top Application Header */}
@@ -318,16 +360,16 @@ export default function App() {
         showGestureCoach={settings.showGestureCoach}
         skeletonOnlyMode={settings.skeletonOnlyMode}
         onToggleCamera={handleToggleCamera}
-        onToggleCoach={() => updateSettings({ showGestureCoach: !settings.showGestureCoach })}
+        onToggleCoach={handleToggleCoach}
         onToggleSkeletonOnly={handleToggleSkeletonOnly}
         onUndo={handleUndo}
         onRedo={handleRedo}
-        onClear={() => setIsClearModalOpen(true)}
+        onClear={handleOpenClearModal}
         onExport={handleOpenExport}
         onToggleFullscreen={handleToggleFullscreen}
-        onOpenGuide={() => setIsGuideOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenLogoPreview={() => setIsLogoPreviewOpen(true)}
+        onOpenGuide={handleOpenGuideModal}
+        onOpenSettings={handleOpenSettingsModal}
+        onOpenLogoPreview={handleOpenLogoModal}
       />
 
       {/* Floating Webcam Preview HUD */}
@@ -341,6 +383,7 @@ export default function App() {
         skeletonOnlyMode={settings.skeletonOnlyMode}
         onToggleCamera={handleToggleCamera}
         onToggleSkeletonOnly={handleToggleSkeletonOnly}
+        onStartDemo={handleStartDemo}
         videoRef={videoRef}
         registerFrameListener={registerFrameListener}
       />
@@ -367,21 +410,11 @@ export default function App() {
         eraserRadius={settings.eraserRadius}
         gridStyle={settings.gridStyle}
         soundEnabled={settings.soundEnabled}
-        onSelectTool={(tool) => {
-          setCurrentTool(tool);
-          soundEffects.playPop();
-        }}
-        onSelectColor={(color) => {
-          updateSettings({ brushColor: color });
-          soundEffects.playPop();
-        }}
-        onSelectBrushSize={(size) => updateSettings({ brushSize: size })}
-        onSelectEraserRadius={(radius) => updateSettings({ eraserRadius: radius })}
-        onSelectGridStyle={(style) => {
-          updateSettings({ gridStyle: style });
-          soundEffects.playPop();
-          addToast('Background Updated', `Switched to ${style}`, 'info');
-        }}
+        onSelectTool={handleSelectTool}
+        onSelectColor={handleSelectColor}
+        onSelectBrushSize={handleSelectBrushSize}
+        onSelectEraserRadius={handleSelectEraserRadius}
+        onSelectGridStyle={handleSelectGridStyle}
         onToggleSound={handleToggleSound}
       />
 

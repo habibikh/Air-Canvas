@@ -15,7 +15,7 @@ export interface UseHandTrackingReturn {
   isHandDetected: boolean;
   dominantHand: 'Left' | 'Right' | 'Unknown';
   isSimulationMode: boolean;
-  startCamera: (videoElement: HTMLVideoElement) => Promise<{ success: boolean; error?: string }>;
+  startCamera: (videoElement: HTMLVideoElement) => Promise<{ success: boolean; error?: string; isDenied?: boolean }>;
   startDemoSimulation: () => void;
   stopCamera: () => void;
   registerFrameListener: (cb: HandFrameCallback) => () => void;
@@ -77,7 +77,7 @@ export function useHandTracking(): UseHandTrackingReturn {
     };
   }, []);
 
-  const startCamera = useCallback(async (videoElement: HTMLVideoElement): Promise<{ success: boolean; error?: string }> => {
+  const startCamera = useCallback(async (videoElement: HTMLVideoElement): Promise<{ success: boolean; error?: string; isDenied?: boolean }> => {
     setErrorMessage(null);
     try {
       await handTrackingService.startCamera(videoElement);
@@ -85,9 +85,20 @@ export function useHandTracking(): UseHandTrackingReturn {
       return { success: true };
     } catch (err: unknown) {
       const error = err as Error;
-      const msg = error.message || 'Unable to access camera.';
-      setErrorMessage(msg);
-      return { success: false, error: msg };
+      const name = error?.name || '';
+      const msg = error?.message || 'Unable to access camera.';
+      const isDenied =
+        name === 'NotAllowedError' ||
+        name === 'PermissionDeniedError' ||
+        msg.toLowerCase().includes('permission') ||
+        msg.toLowerCase().includes('not allowed');
+
+      const friendlyMsg = isDenied
+        ? 'Camera permission denied. Allow access in your browser address bar to use gestures.'
+        : msg;
+
+      setErrorMessage(friendlyMsg);
+      return { success: false, error: friendlyMsg, isDenied };
     }
   }, []);
 

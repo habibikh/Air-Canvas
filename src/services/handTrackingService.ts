@@ -150,13 +150,13 @@ export class HandTrackingService {
         (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
           (typeof window !== 'undefined' && window.innerWidth < 768));
 
-      // Constraints optimized for 30 FPS without camera hardware stalls
+      // Constraints optimized for smooth 30 FPS without camera hardware stalls or excessive bus bandwidth
       const constraints: MediaStreamConstraints = {
         video: {
-          width: isMobile ? { ideal: 480, max: 640 } : { ideal: 640, max: 640 },
-          height: isMobile ? { ideal: 360, max: 480 } : { ideal: 480, max: 480 },
+          width: { ideal: 480, max: 480 },
+          height: { ideal: 360, max: 360 },
           facingMode: 'user',
-          frameRate: { ideal: 30, max: 45 },
+          frameRate: { ideal: 30, max: 30 },
         },
         audio: false,
       };
@@ -164,7 +164,16 @@ export class HandTrackingService {
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (strictErr) {
+      } catch (strictErr: any) {
+        // If user explicitly denied permission, do not retry with relaxed constraints
+        if (
+          strictErr?.name === 'NotAllowedError' ||
+          strictErr?.name === 'PermissionDeniedError' ||
+          strictErr?.message?.toLowerCase().includes('permission') ||
+          strictErr?.message?.toLowerCase().includes('not allowed')
+        ) {
+          throw strictErr;
+        }
         // Fallback for cameras that reject specific constraint objects
         stream = await navigator.mediaDevices.getUserMedia({
           video: true,
@@ -184,16 +193,38 @@ export class HandTrackingService {
       this.startProcessingLoop();
     } catch (err: unknown) {
       const error = err as Error;
-      console.error('Camera or MediaPipe initialization failed:', error);
+      const errorName = error?.name || '';
+      const errorMsg = error?.message || '';
+
+      const isPermissionDenied =
+        errorName === 'NotAllowedError' ||
+        errorName === 'PermissionDeniedError' ||
+        errorMsg.toLowerCase().includes('permission denied') ||
+        errorMsg.toLowerCase().includes('permission') ||
+        errorMsg.toLowerCase().includes('not allowed');
+
+      const isNotFound =
+        errorName === 'NotFoundError' ||
+        errorName === 'DevicesNotFoundError' ||
+        errorMsg.toLowerCase().includes('not found') ||
+        errorMsg.toLowerCase().includes('device');
+
       let status: CameraStatus = 'error';
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      if (isPermissionDenied) {
         status = 'denied';
-      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+        console.warn('Camera permission was denied or restricted by browser:', errorMsg || 'NotAllowedError');
+      } else if (isNotFound) {
         status = 'unsupported';
+        console.warn('No camera hardware detected on device:', errorMsg || 'NotFoundError');
+      } else {
+        console.error('HandLandmarker or camera stream error:', error);
       }
 
       if (this.statusCallback) {
-        this.statusCallback(status, error.message);
+        this.statusCallback(
+          status,
+          isPermissionDenied ? 'Camera permission denied' : error.message
+        );
       }
       throw error;
     }
@@ -208,14 +239,19 @@ export class HandTrackingService {
 
     const hasRVFC = typeof (video as unknown as { requestVideoFrameCallback?: Function }).requestVideoFrameCallback === 'function';
 
+    let lastInferenceDuration = 0;
+
     const processTick = () => {
       if (!this.isRunning) return;
 
       const now = performance.now();
       const elapsed = now - this.lastFrameTimestamp;
 
-      // Rate limiter: ensure max 35 FPS to avoid UI lagging
-      if (elapsed >= this.minFrameIntervalMs) {
+      // Adaptive throttle: Ensure at least 14ms of main thread idle time between inferences
+      // This prevents MediaPipe from thread-locking CPU/WebGL and allows UI/Canvas to run at 60 FPS
+      const adaptiveInterval = Math.max(this.minFrameIntervalMs, lastInferenceDuration + 14);
+
+      if (elapsed >= adaptiveInterval) {
         if (!this.isProcessingFrame && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && this.handLandmarker) {
           this.isProcessingFrame = true;
           this.lastFrameTimestamp = now;
@@ -234,7 +270,10 @@ export class HandTrackingService {
             const timestamp = Math.max(now, this.lastInferenceTimestamp + 1);
             this.lastInferenceTimestamp = timestamp;
 
+            const tStart = performance.now();
             const results = this.handLandmarker.detectForVideo(video, timestamp);
+            lastInferenceDuration = performance.now() - tStart;
+
             this.processDetectionResult(results);
           } catch (e) {
             // Frame dropped or skipped

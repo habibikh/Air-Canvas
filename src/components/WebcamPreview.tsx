@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Maximize2,
   Check,
+  ShieldAlert,
 } from 'lucide-react';
 import { CameraStatus, GestureType, HandDetectionResult, LandmarkPoint } from '../types';
 import { HAND_CONNECTIONS, HandFrameCallback } from '../services/handTrackingService';
@@ -32,6 +33,7 @@ interface WebcamPreviewProps {
   skeletonOnlyMode: boolean;
   onToggleCamera: () => void;
   onToggleSkeletonOnly: () => void;
+  onStartDemo?: () => void;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   registerFrameListener: (cb: HandFrameCallback) => () => void;
 }
@@ -46,6 +48,7 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = React.memo(({
   skeletonOnlyMode,
   onToggleCamera,
   onToggleSkeletonOnly,
+  onStartDemo,
   videoRef,
   registerFrameListener,
 }) => {
@@ -530,7 +533,7 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = React.memo(({
               className="absolute inset-0 w-full h-full pointer-events-none scale-x-[-1]"
             />
 
-            {/* Inactive or Requesting camera state display */}
+            {/* Inactive, Denied, or Requesting camera state display */}
             {cameraStatus !== 'active' && (
               <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center bg-slate-900/90 text-white">
                 {cameraStatus === 'requesting' ? (
@@ -538,18 +541,54 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = React.memo(({
                     <div className="w-6 h-6 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin mb-1.5" />
                     <p className="text-xs font-medium text-slate-200">Connecting AI camera...</p>
                   </>
+                ) : cameraStatus === 'denied' ? (
+                  <>
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center mb-1.5">
+                      <ShieldAlert className="w-4 h-4" />
+                    </div>
+                    <p className="text-xs font-semibold text-amber-200">Camera Blocked</p>
+                    <p className="text-[10px] text-slate-300 mt-0.5 max-w-[200px] leading-tight">
+                      Allow camera in browser address bar to use gestures.
+                    </p>
+                    <div className="mt-2.5 flex items-center gap-1.5">
+                      <button
+                        onClick={onToggleCamera}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-medium transition-colors shadow-xs cursor-pointer"
+                      >
+                        Retry Camera
+                      </button>
+                      {onStartDemo && (
+                        <button
+                          onClick={onStartDemo}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[11px] font-medium transition-colors border border-slate-700 cursor-pointer"
+                        >
+                          Try Demo
+                        </button>
+                      )}
+                    </div>
+                  </>
                 ) : (
                   <>
                     <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400 mb-1.5">
                       <Camera className="w-4 h-4" />
                     </div>
-                    <p className="text-xs font-semibold text-slate-200">Camera Off</p>
-                    <button
-                      onClick={onToggleCamera}
-                      className="mt-2 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors shadow-xs"
-                    >
-                      Start Camera
-                    </button>
+                    <p className="text-xs font-semibold text-slate-200">Camera Inactive</p>
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <button
+                        onClick={onToggleCamera}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors shadow-xs cursor-pointer"
+                      >
+                        Start Camera
+                      </button>
+                      {onStartDemo && (
+                        <button
+                          onClick={onStartDemo}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-medium transition-colors border border-slate-700 cursor-pointer"
+                        >
+                          Demo
+                        </button>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
