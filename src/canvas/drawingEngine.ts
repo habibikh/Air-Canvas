@@ -46,9 +46,18 @@ export class DrawingEngine {
   // Cached 24x24 dot pattern tile for instant dot grid rendering
   private dotPatternCanvas: HTMLCanvasElement | null = null;
 
+  // Incremental active-pen rendering state (O(1) dirty-rect per frame instead of full-screen blit)
+  private activeRenderStrokeId: string | null = null;
+  private activeBakedIdx: number = 0;
+  private prevTailRect: { x: number; y: number; w: number; h: number } | null = null;
+
   constructor(canvas: HTMLCanvasElement, history: StrokeHistory) {
     this.canvas = canvas;
-    const context = canvas.getContext('2d', { willReadFrequently: false, alpha: false });
+    const context = canvas.getContext('2d', {
+      willReadFrequently: false,
+      alpha: false,
+      desynchronized: true,
+    });
     if (!context) {
       throw new Error('Canvas 2D context not available');
     }
@@ -87,9 +96,16 @@ export class DrawingEngine {
     }
   }
 
+  private resetIncrementalState() {
+    this.activeRenderStrokeId = null;
+    this.activeBakedIdx = 0;
+    this.prevTailRect = null;
+  }
+
   public invalidateCache() {
     this.isInkDirty = true;
     this.isCompositeDirty = true;
+    this.resetIncrementalState();
     this.requestRender();
   }
 
@@ -98,6 +114,8 @@ export class DrawingEngine {
    * without re-rendering the entire stroke history.
    */
   public commitStroke(stroke: Stroke | null) {
+    this.resetIncrementalState();
+
     if (!stroke) {
       this.render();
       return;
@@ -171,6 +189,7 @@ export class DrawingEngine {
     this.isBgDirty = true;
     this.isInkDirty = true;
     this.isCompositeDirty = true;
+    this.resetIncrementalState();
     this.requestRender();
   }
 
@@ -222,28 +241,201 @@ export class DrawingEngine {
     this.isCompositeDirty = false;
   }
 
+  private computePointsBounds(
+    points: { x: number; y: number }[],
+    pad: number
+  ): { x: number; y: number; w: number; h: number } {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const px = points[i].x * this.width;
+      const py = points[i].y * this.height;
+      if (px < minX) minX = px;
+      if (py < minY) minY = py;
+      if (px > maxX) maxX = px;
+      if (py > maxY) maxY = py;
+    }
+    const x = Math.max(0, minX - pad);
+    const y = Math.max(0, minY - pad);
+    const r = Math.min(this.width, maxX + pad);
+    const b = Math.min(this.height, maxY + pad);
+    return { x, y, w: Math.max(1, r - x), h: Math.max(1, b - y) };
+  }
+
+  private renderActivePenIncremental(activeStroke: Stroke) {
+    const { ctx, scratchCtx: sCtx, dpr, width, height } = this;
+    const pts = activeStroke.points;
+    const n = pts.length;
+    if (n === 0) return;
+
+    const pad = activeStroke.size + 8;
+
+    // First frame of this stroke, resize reset, or very short stroke (<= 3 points)
+    if (this.activeRenderStrokeId !== activeStroke.id || n < this.activeBakedIdx + 2) {
+      sCtx.globalCompositeOperation = 'source-over';
+      sCtx.drawImage(this.compositeCanvas, 0, 0);
+      this.activeRenderStrokeId = activeStroke.id;
+      this.activeBakedIdx = 0;
+      this.prevTailRect = null;
+
+      if (n <= 3) {
+        ctx.drawImage(this.compositeCanvas, 0, 0);
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        this.renderStroke(ctx, activeStroke, width, height);
+        ctx.restore();
+        this.prevTailRect = this.computePointsBounds(pts, pad);
+        return;
+      }
+    }
+
+    if (n <= 3) {
+      const currRect = this.computePointsBounds(pts, pad);
+      const prev = this.prevTailRect || currRect;
+      const rx = Math.min(prev.x, currRect.x);
+      const ry = Math.min(prev.y, currRect.y);
+      const rr = Math.max(prev.x + prev.w, currRect.x + currRect.w);
+      const rb = Math.max(prev.y + prev.h, currRect.y + currRect.h);
+
+      const sx = Math.max(0, Math.floor(rx * dpr));
+      const sy = Math.max(0, Math.floor(ry * dpr));
+      const sw = Math.min(this.canvas.width - sx, Math.ceil((rr - rx) * dpr) + 2);
+      const sh = Math.min(this.canvas.height - sy, Math.ceil((rb - ry) * dpr) + 2);
+
+      if (sw > 0 && sh > 0) {
+        ctx.drawImage(this.compositeCanvas, sx, sy, sw, sh, sx, sy, sw, sh);
+      }
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      this.renderStroke(ctx, activeStroke, width, height);
+      ctx.restore();
+      this.prevTailRect = currRect;
+      return;
+    }
+
+    // Bake newly frozen quadratic segments [activeBakedIdx + 1 .. n - 3] onto scratchCanvas
+    const hadFullCopyOnly = this.activeBakedIdx === 0 && !this.prevTailRect;
+    if (this.activeBakedIdx < n - 3) {
+      sCtx.save();
+      sCtx.scale(dpr, dpr);
+      sCtx.globalCompositeOperation = 'source-over';
+      sCtx.globalAlpha = 1.0;
+      sCtx.lineCap = 'round';
+      sCtx.lineJoin = 'round';
+      sCtx.lineWidth = activeStroke.size;
+      sCtx.strokeStyle = activeStroke.color;
+
+      sCtx.beginPath();
+      const firstIdx = this.activeBakedIdx + 1;
+      if (firstIdx === 1) {
+        sCtx.moveTo(pts[0].x * width, pts[0].y * height);
+      } else {
+        const startMidX = ((pts[firstIdx - 1].x + pts[firstIdx].x) * 0.5) * width;
+        const startMidY = ((pts[firstIdx - 1].y + pts[firstIdx].y) * 0.5) * height;
+        sCtx.moveTo(startMidX, startMidY);
+      }
+
+      for (let i = firstIdx; i <= n - 3; i++) {
+        const curr = pts[i];
+        const next = pts[i + 1];
+        const currX = curr.x * width;
+        const currY = curr.y * height;
+        const midX = ((curr.x + next.x) * 0.5) * width;
+        const midY = ((curr.y + next.y) * 0.5) * height;
+        sCtx.quadraticCurveTo(currX, currY, midX, midY);
+        this.activeBakedIdx = i;
+      }
+      sCtx.stroke();
+      sCtx.restore();
+    }
+
+    // Tail starts at the end of the last baked segment: mid(pts[n-3], pts[n-2])
+    const pPrev = pts[n - 3];
+    const pCurr = pts[n - 2];
+    const pLast = pts[n - 1];
+    const tailPts = [
+      { x: (pPrev.x + pCurr.x) * 0.5, y: (pPrev.y + pCurr.y) * 0.5 },
+      pCurr,
+      pLast,
+    ];
+    const currRect = this.computePointsBounds(tailPts, pad);
+
+    if (hadFullCopyOnly) {
+      // Mid-stroke resize recovery: blit full scratchCanvas once
+      ctx.drawImage(this.scratchCanvas, 0, 0);
+    } else {
+      const prev = this.prevTailRect || currRect;
+      const rx = Math.min(prev.x, currRect.x);
+      const ry = Math.min(prev.y, currRect.y);
+      const rr = Math.max(prev.x + prev.w, currRect.x + currRect.w);
+      const rb = Math.max(prev.y + prev.h, currRect.y + currRect.h);
+
+      const sx = Math.max(0, Math.floor(rx * dpr));
+      const sy = Math.max(0, Math.floor(ry * dpr));
+      const sw = Math.min(this.canvas.width - sx, Math.ceil((rr - rx) * dpr) + 2);
+      const sh = Math.min(this.canvas.height - sy, Math.ceil((rb - ry) * dpr) + 2);
+
+      if (sw > 0 && sh > 0) {
+        ctx.drawImage(this.scratchCanvas, sx, sy, sw, sh, sx, sy, sw, sh);
+      }
+    }
+
+    // Draw only the tiny 2-segment live tail on main canvas
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1.0;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = activeStroke.size;
+    ctx.strokeStyle = activeStroke.color;
+
+    const tailStartX = tailPts[0].x * width;
+    const tailStartY = tailPts[0].y * height;
+    const currX = pCurr.x * width;
+    const currY = pCurr.y * height;
+    const midEndX = ((pCurr.x + pLast.x) * 0.5) * width;
+    const midEndY = ((pCurr.y + pLast.y) * 0.5) * height;
+
+    ctx.beginPath();
+    ctx.moveTo(tailStartX, tailStartY);
+    ctx.quadraticCurveTo(currX, currY, midEndX, midEndY);
+    ctx.lineTo(pLast.x * width, pLast.y * height);
+    ctx.stroke();
+    ctx.restore();
+
+    this.prevTailRect = currRect;
+  }
+
   public render() {
     const { ctx, dpr, width, height } = this;
     if (width === 0 || height === 0) return;
 
     if (this.isBgDirty) {
       this.rebuildBackground();
+      this.resetIncrementalState();
     }
     if (this.isInkDirty) {
       this.rebuildInk();
+      this.resetIncrementalState();
     }
     if (this.isCompositeDirty) {
       this.rebuildComposite();
+      this.resetIncrementalState();
     }
 
     const activeStroke = this.history.getActiveStroke();
 
     if (!activeStroke) {
+      this.resetIncrementalState();
       ctx.drawImage(this.compositeCanvas, 0, 0);
       return;
     }
 
     if (activeStroke.tool === 'eraser') {
+      this.resetIncrementalState();
       const sCtx = this.scratchCtx;
       sCtx.clearRect(0, 0, this.scratchCanvas.width, this.scratchCanvas.height);
       sCtx.drawImage(this.inkCanvas, 0, 0);
@@ -258,11 +450,7 @@ export class DrawingEngine {
       return;
     }
 
-    ctx.drawImage(this.compositeCanvas, 0, 0);
-    ctx.save();
-    ctx.scale(dpr, dpr);
-    this.renderStroke(ctx, activeStroke, width, height);
-    ctx.restore();
+    this.renderActivePenIncremental(activeStroke);
   }
 
   private getDotPatternCanvas(): HTMLCanvasElement {

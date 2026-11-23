@@ -110,9 +110,9 @@ export class HandTrackingService {
             },
             runningMode: 'VIDEO',
             numHands: 1,
-            minHandDetectionConfidence: 0.48,
-            minHandPresenceConfidence: 0.48,
-            minTrackingConfidence: 0.48,
+            minHandDetectionConfidence: 0.40,
+            minHandPresenceConfidence: 0.35,
+            minTrackingConfidence: 0.32,
           });
         } catch (gpuErr) {
           console.warn('GPU acceleration unavailable or failed, using CPU delegate:', gpuErr);
@@ -123,9 +123,9 @@ export class HandTrackingService {
             },
             runningMode: 'VIDEO',
             numHands: 1,
-            minHandDetectionConfidence: 0.48,
-            minHandPresenceConfidence: 0.48,
-            minTrackingConfidence: 0.48,
+            minHandDetectionConfidence: 0.40,
+            minHandPresenceConfidence: 0.35,
+            minTrackingConfidence: 0.32,
           });
         }
 
@@ -243,12 +243,12 @@ export class HandTrackingService {
   private getInferenceSource(video: HTMLVideoElement): HTMLVideoElement | HTMLCanvasElement {
     const vw = video.videoWidth;
     const vh = video.videoHeight;
-    if (!vw || !vh || vw <= 480) {
+    if (!vw || !vh || vw <= 320) {
       return video;
     }
 
-    const targetW = 320;
-    const targetH = Math.max(180, Math.round((vh * targetW) / vw));
+    const targetW = 256;
+    const targetH = Math.max(144, Math.round((vh * targetW) / vw));
 
     if (!this.inferenceCanvas) {
       this.inferenceCanvas = document.createElement('canvas');

@@ -20,7 +20,7 @@ export const DEFAULT_THRESHOLDS: GestureThresholds = {
   fingerExtensionRatio: 1.05,
   fingerMcpRatio: 1.10,
   debounceFrames: 3,
-  graceFrames: 3,
+  graceFrames: 5,
 };
 
 /**
@@ -82,6 +82,7 @@ export class LandmarkSmoother {
 
 export interface FingerAnalysis {
   index: boolean;
+  indexRelaxed?: boolean;
   middle: boolean;
   ring: boolean;
   pinky: boolean;
@@ -220,10 +221,27 @@ export function analyzeFingers(
   const ringFolded = isFingerFolded(landmarks[16], landmarks[14], landmarks[13], wrist, handScale);
   const pinkyFolded = isFingerFolded(landmarks[20], landmarks[18], landmarks[17], wrist, handScale);
 
+  // Ergonomic tilted / slightly curved index finger tolerance while writing:
+  // If middle & ring are tucked and the index fingertip clearly extends further than middle tip,
+  // treat it as pointing even when bent naturally or foreshortened toward the camera.
+  const indexTipWrist = fingerDistance(landmarks[8], wrist);
+  const middleTipWrist = fingerDistance(landmarks[12], wrist);
+  const indexTipMcp = fingerDistance(landmarks[8], landmarks[5]);
+  const indexPipMcp = fingerDistance(landmarks[6], landmarks[5]);
+  const indexRelaxed =
+    !index &&
+    !middle &&
+    middleFolded &&
+    ringFolded &&
+    !indexFolded &&
+    indexTipMcp > Math.max(handScale * 0.36, indexPipMcp * 0.92) &&
+    indexTipWrist > middleTipWrist * 1.12;
+
   const extendedCount = (index ? 1 : 0) + (middle ? 1 : 0) + (ring ? 1 : 0) + (pinky ? 1 : 0);
 
   return {
     index,
+    indexRelaxed,
     middle,
     ring,
     pinky,
@@ -241,12 +259,13 @@ export function analyzeFingers(
  * Classifies raw gesture from finger analysis:
  * - Open palm (4+ fingers extended): erase (Erase)
  * - 2 Fingers (Index + Middle extended): cursor (Pointer)
+ * - 1 Finger (Index extended, or naturally tilted/curved while others folded): draw (Write)
  * - Closed Fist (0 fingers extended / all folded): pause (Hold)
- * - 1 Finger (Index extended): draw (Write)
  */
 export function classifyGesture(fingers: Partial<FingerAnalysis>): GestureType {
   const {
     index = false,
+    indexRelaxed = false,
     middle = false,
     ring = false,
     pinky = false,
@@ -269,19 +288,17 @@ export function classifyGesture(fingers: Partial<FingerAnalysis>): GestureType {
     return 'cursor';
   }
 
-  // 3. Closed Fist -> Hold / Pause
-  if (extendedCount === 0 || (!index && middleFolded && ringFolded && pinkyFolded)) {
-    return 'pause';
-  }
-
-  // 4. Index Finger Extended -> Write
+  // 3. Index Finger Extended (or naturally tilted/curved pointing grip) -> Write
   if (index && !middle && !ring && !pinky) {
     return 'draw';
   }
-
-  // Ergonomic tolerance for natural pointing grip
-  if (index && middleFolded && ringFolded && !middle) {
+  if ((index || indexRelaxed) && middleFolded && ringFolded && !middle) {
     return 'draw';
+  }
+
+  // 4. Closed Fist -> Hold / Pause
+  if (extendedCount === 0 || (!index && !indexRelaxed && middleFolded && ringFolded && pinkyFolded)) {
+    return 'pause';
   }
 
   return 'none';

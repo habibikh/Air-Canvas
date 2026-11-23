@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  analyzeFingers,
   classifyGesture,
   isFingerExtended,
   isFingerFolded,
@@ -203,4 +204,48 @@ test('LandmarkSmoother dampens micro-jitter and Z-depth noise while resetting cl
   smoother.reset();
   const afterReset = smoother.smooth(noisy);
   assert.equal(afterReset[8].x, 0.5015);
+});
+
+test('analyzeFingers + classifyGesture recognize naturally tilted/curved index finger as Write, not Hold', () => {
+  // Hand landmark skeleton (21 pts) with middle/ring/pinky folded into palm,
+  // and index finger angled/curved (~35 deg) as during natural fast handwriting
+  const landmarks: LandmarkPoint[] = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.65, z: 0 }));
+  landmarks[0] = { x: 0.5, y: 0.90, z: 0 };  // Wrist
+  landmarks[2] = { x: 0.44, y: 0.78, z: 0 }; // Thumb MCP
+  landmarks[3] = { x: 0.45, y: 0.72, z: 0 }; // Thumb IP
+  landmarks[4] = { x: 0.47, y: 0.69, z: 0 }; // Thumb tip (tucked)
+
+  // Index tilted forward/sideways (not ramrod straight)
+  landmarks[5] = { x: 0.46, y: 0.62, z: 0 };
+  landmarks[6] = { x: 0.43, y: 0.51, z: -0.02 };
+  landmarks[7] = { x: 0.46, y: 0.46, z: -0.05 };
+  landmarks[8] = { x: 0.50, y: 0.45, z: -0.07 };
+
+  // Middle, ring, pinky curled tight
+  landmarks[9] = { x: 0.50, y: 0.62, z: 0 };
+  landmarks[10] = { x: 0.50, y: 0.57, z: 0 };
+  landmarks[12] = { x: 0.50, y: 0.66, z: 0 };
+
+  landmarks[13] = { x: 0.54, y: 0.63, z: 0 };
+  landmarks[14] = { x: 0.54, y: 0.58, z: 0 };
+  landmarks[16] = { x: 0.54, y: 0.67, z: 0 };
+
+  landmarks[17] = { x: 0.58, y: 0.65, z: 0 };
+  landmarks[18] = { x: 0.58, y: 0.61, z: 0 };
+  landmarks[20] = { x: 0.58, y: 0.69, z: 0 };
+
+  const analysis = analyzeFingers(landmarks);
+  assert.ok(analysis !== null);
+  assert.equal(classifyGesture(analysis), 'draw');
+});
+
+test('GestureStabilizer default graceFrames keeps active Write stroke alive across 5 motion-blur frames', () => {
+  const stabilizer = new GestureStabilizer(DEFAULT_THRESHOLDS);
+  assert.equal(stabilizer.process('draw'), 'none');
+  assert.equal(stabilizer.process('draw'), 'draw');
+
+  for (let i = 0; i < DEFAULT_THRESHOLDS.graceFrames; i++) {
+    assert.equal(stabilizer.process('none'), 'draw');
+  }
+  assert.equal(stabilizer.process('none'), 'none');
 });
