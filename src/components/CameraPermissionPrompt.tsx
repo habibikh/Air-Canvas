@@ -96,7 +96,7 @@ export const CameraPermissionPrompt: React.FC<CameraPermissionPromptProps> = ({
             </div>
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Welcome to AirCanvas</h2>
             <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-              Draw and write in thin air using your webcam. Index finger writes, open palm erases, fist pauses.
+              Write in thin air using your webcam: 1 finger writes, open palm erases, 2 fingers move pointer, closed fist holds.
             </p>
 
             {/* Privacy Guarantee Box */}

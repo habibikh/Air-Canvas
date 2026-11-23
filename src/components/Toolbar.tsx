@@ -1,16 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Edit3,
-  Highlighter,
   Eraser,
-  Square,
-  Circle as CircleIcon,
-  Minus,
-  Shapes,
   Volume2,
   VolumeX,
   Check,
-  ChevronUp,
 } from 'lucide-react';
 import { GridStyle, StrokeTool } from '../types';
 
@@ -76,131 +70,43 @@ export const Toolbar: React.FC<ToolbarProps> = React.memo(({
   onSelectGridStyle,
   onToggleSound,
 }) => {
-  const [showShapeMenu, setShowShapeMenu] = useState<boolean>(false);
-  const isShapeTool = ['line', 'rectangle', 'circle'].includes(currentTool);
-
   return (
     <div className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-auto max-w-[calc(100vw-16px)]">
-      {/* Floating Shape Selection Popover */}
-      {showShapeMenu && (
-        <div className="absolute bottom-full mb-2 left-12 glass-panel p-1.5 rounded-2xl shadow-xl flex items-center gap-1 animate-fade-in">
-          <button
-            onClick={() => {
-              onSelectTool('line');
-              setShowShapeMenu(false);
-            }}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              currentTool === 'line' ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-slate-100 text-slate-700'
-            }`}
-          >
-            <Minus className="w-3.5 h-3.5" />
-            <span>Line</span>
-          </button>
-
-          <button
-            onClick={() => {
-              onSelectTool('rectangle');
-              setShowShapeMenu(false);
-            }}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              currentTool === 'rectangle' ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-slate-100 text-slate-700'
-            }`}
-          >
-            <Square className="w-3.5 h-3.5" />
-            <span>Rectangle</span>
-          </button>
-
-          <button
-            onClick={() => {
-              onSelectTool('circle');
-              setShowShapeMenu(false);
-            }}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              currentTool === 'circle' ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-slate-100 text-slate-700'
-            }`}
-          >
-            <CircleIcon className="w-3.5 h-3.5" />
-            <span>Circle</span>
-          </button>
-        </div>
-      )}
-
       <div className="bg-white/90 backdrop-blur-md px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-2xl flex items-center gap-1.5 sm:gap-2.5 shadow-lg border border-zinc-200/80 overflow-x-auto max-w-full">
-        {/* Tool Selectors */}
+        {/* Core Tool Selectors: Write & Erase */}
         <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-xl shrink-0">
-          {/* Pen */}
           <button
-            onClick={() => {
-              onSelectTool('pen');
-              setShowShapeMenu(false);
-            }}
+            onClick={() => onSelectTool('pen')}
             className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               currentTool === 'pen'
                 ? 'bg-zinc-900 text-white shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/70'
             }`}
-            title="Pen (Air gesture: 1 extended finger)"
+            title="Write (Air gesture: 1 extended finger)"
             aria-label="Pen tool"
           >
             <Edit3 className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline">Pen</span>
+            <span>Write</span>
           </button>
 
-          {/* Highlighter */}
           <button
-            onClick={() => {
-              onSelectTool('highlighter');
-              setShowShapeMenu(false);
-            }}
-            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              currentTool === 'highlighter'
-                ? 'bg-amber-500 text-white shadow-xs'
-                : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/70'
-            }`}
-            title="Highlighter (Semi-transparent stroke)"
-            aria-label="Highlighter tool"
-          >
-            <Highlighter className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Highlight</span>
-          </button>
-
-          {/* Shapes Dropdown */}
-          <button
-            onClick={() => setShowShapeMenu(!showShapeMenu)}
-            className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              isShapeTool
-                ? 'bg-zinc-900 text-white shadow-xs'
-                : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/70'
-            }`}
-            title="Shapes (Line, Rectangle, Circle)"
-            aria-label="Shapes tool"
-          >
-            <Shapes className="w-3.5 h-3.5" />
-            <ChevronUp className={`w-3 h-3 transition-transform ${showShapeMenu ? 'rotate-180' : ''}`} />
-          </button>
-
-          {/* Eraser */}
-          <button
-            onClick={() => {
-              onSelectTool('eraser');
-              setShowShapeMenu(false);
-            }}
+            onClick={() => onSelectTool('eraser')}
             className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               currentTool === 'eraser'
                 ? 'bg-rose-600 text-white shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-900 hover:bg-white/70'
             }`}
-            title="Eraser (Air gesture: Open palm)"
+            title="Erase (Air gesture: Open palm)"
             aria-label="Eraser tool"
           >
             <Eraser className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline">Eraser</span>
+            <span>Erase</span>
           </button>
         </div>
 
         <div className="h-5 sm:h-6 w-[1px] bg-zinc-200 shrink-0"></div>
 
-        {/* Color Palette (Active when drawing or highlighting) */}
+        {/* Color Palette or Eraser Radius */}
         {currentTool !== 'eraser' ? (
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {PRESET_COLORS.map((c) => (
@@ -221,7 +127,6 @@ export const Toolbar: React.FC<ToolbarProps> = React.memo(({
             ))}
           </div>
         ) : (
-          /* Eraser Size Selector */
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <span className="text-xs text-slate-500 font-medium px-1 hidden md:inline">Eraser Size:</span>
             {ERASER_SIZES.map((es) => (
@@ -291,7 +196,7 @@ export const Toolbar: React.FC<ToolbarProps> = React.memo(({
 
         <div className="h-5 sm:h-6 w-[1px] bg-slate-200 shrink-0"></div>
 
-        {/* Quick Audio Mute / Unmute Button */}
+        {/* Audio Mute / Unmute */}
         <button
           onClick={onToggleSound}
           className={`p-1.5 sm:p-2 rounded-xl transition-all shrink-0 ${

@@ -1,11 +1,17 @@
 /**
  * High-Performance MediaPipe Tasks Vision HandLandmarker integration service
- * Smooth 30 - 35 FPS tracking without main thread starvation
+ * Lazy-loaded for instant initial page boot, smooth 30-35 FPS tracking without main thread lag.
  */
 
-import { FilesetResolver, HandLandmarker, HandLandmarkerResult } from '@mediapipe/tasks-vision';
+import type { HandLandmarker, HandLandmarkerResult } from '@mediapipe/tasks-vision';
 import { CameraStatus, GestureType, HandDetectionResult, LandmarkPoint } from '../types';
-import { analyzeFingers, calculatePalmCenter, classifyGesture, GestureStabilizer } from '../utils/gestureRecognition';
+import {
+  analyzeFingers,
+  calculatePalmCenter,
+  classifyGesture,
+  GestureStabilizer,
+  LandmarkSmoother,
+} from '../utils/gestureRecognition';
 
 export const HAND_CONNECTIONS: [number, number][] = [
   // Thumb
@@ -26,7 +32,7 @@ export type HandFrameCallback = (result: HandDetectionResult, rawResults?: HandL
 
 export class HandTrackingService {
   private handLandmarker: HandLandmarker | null = null;
-  private isInitializing: boolean = false;
+  private initPromise: Promise<HandLandmarker> | null = null;
   private isRunning: boolean = false;
   private isProcessingFrame: boolean = false;
   private isSimulating: boolean = false;
@@ -38,15 +44,19 @@ export class HandTrackingService {
   private rvfcId: number | null = null;
   private lastFrameTimestamp: number = 0;
   private lastInferenceTimestamp: number = 0;
+  private lastHandSeenTimestamp: number = 0;
   private stabilizer = new GestureStabilizer();
+  private landmarkSmoother = new LandmarkSmoother();
   private callbacks: Set<HandFrameCallback> = new Set();
   private statusCallback?: (status: CameraStatus, error?: string) => void;
 
-  // Frame rate control: 30 - 35 FPS ideal for stable computer vision without lagging UI thread
-  private targetMaxFps: number = 35;
-  private minFrameIntervalMs: number = 1000 / 35; // ~28.5ms
+  // Reusable downscaled canvas so HD webcams (720p/1080p) never stall MediaPipe inference
+  private inferenceCanvas: HTMLCanvasElement | null = null;
+  private inferenceCtx: CanvasRenderingContext2D | null = null;
 
-  // Rolling telemetry metrics
+  private targetMaxFps: number = 45;
+  private minFrameIntervalMs: number = 1000 / 45;
+
   private frameCount: number = 0;
   private lastFpsTime: number = performance.now();
   private currentFps: number = 0;
@@ -54,7 +64,7 @@ export class HandTrackingService {
   constructor() {}
 
   public setTargetMaxFps(fps: number) {
-    this.targetMaxFps = Math.max(25, Math.min(45, fps));
+    this.targetMaxFps = Math.max(24, Math.min(60, fps));
     this.minFrameIntervalMs = 1000 / this.targetMaxFps;
   }
 
@@ -68,68 +78,73 @@ export class HandTrackingService {
   }
 
   /**
-   * Initializes MediaPipe HandLandmarker with GPU and graceful fallback to CPU
+   * Warm up the MediaPipe JS chunk in the background without blocking initial UI paint
+   */
+  public preloadModule(): void {
+    void import('@mediapipe/tasks-vision').catch(() => {});
+  }
+
+  /**
+   * Initializes MediaPipe HandLandmarker lazily with GPU and graceful fallback to CPU
    */
   public async initMediaPipe(): Promise<HandLandmarker> {
     if (this.handLandmarker) return this.handLandmarker;
-    if (this.isInitializing) {
-      while (this.isInitializing) {
-        await new Promise((r) => setTimeout(r, 40));
-      }
-      if (this.handLandmarker) return this.handLandmarker;
-    }
+    if (this.initPromise) return this.initPromise;
 
-    this.isInitializing = true;
-    try {
-      const vision = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm'
-      );
-
-      const modelAssetPath =
-        'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
-
+    this.initPromise = (async () => {
       try {
-        // Attempt GPU acceleration first
-        this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath,
-            delegate: 'GPU',
-          },
-          runningMode: 'VIDEO',
-          numHands: 1,
-          minHandDetectionConfidence: 0.38,
-          minHandPresenceConfidence: 0.38,
-          minTrackingConfidence: 0.38,
-        });
-      } catch (gpuErr) {
-        console.warn('GPU acceleration unavailable or failed, using CPU delegate:', gpuErr);
-        this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath,
-            delegate: 'CPU',
-          },
-          runningMode: 'VIDEO',
-          numHands: 1,
-          minHandDetectionConfidence: 0.38,
-          minHandPresenceConfidence: 0.38,
-          minTrackingConfidence: 0.38,
-        });
-      }
+        const { FilesetResolver, HandLandmarker } = await import('@mediapipe/tasks-vision');
 
-      return this.handLandmarker;
-    } finally {
-      this.isInitializing = false;
-    }
+        const vision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.0/wasm'
+        );
+
+        const modelAssetPath =
+          'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+
+        try {
+          this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath,
+              delegate: 'GPU',
+            },
+            runningMode: 'VIDEO',
+            numHands: 1,
+            minHandDetectionConfidence: 0.48,
+            minHandPresenceConfidence: 0.48,
+            minTrackingConfidence: 0.48,
+          });
+        } catch (gpuErr) {
+          console.warn('GPU acceleration unavailable or failed, using CPU delegate:', gpuErr);
+          this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath,
+              delegate: 'CPU',
+            },
+            runningMode: 'VIDEO',
+            numHands: 1,
+            minHandDetectionConfidence: 0.48,
+            minHandPresenceConfidence: 0.48,
+            minTrackingConfidence: 0.48,
+          });
+        }
+
+        return this.handLandmarker;
+      } catch (err) {
+        this.initPromise = null;
+        throw err;
+      }
+    })();
+
+    return this.initPromise;
   }
 
   /**
    * Request webcam stream with graceful fallback
    */
   public async startCamera(videoEl: HTMLVideoElement): Promise<void> {
-    // If simulation was running, stop it
     this.stopSimulation();
 
-    // Clean up any existing stream first
     if (this.stream) {
       this.stream.getTracks().forEach((t) => t.stop());
       this.stream = null;
@@ -142,44 +157,37 @@ export class HandTrackingService {
     }
 
     try {
-      await this.initMediaPipe();
-
-      // Check if mobile device
-      const isMobile =
-        typeof navigator !== 'undefined' &&
-        (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-          (typeof window !== 'undefined' && window.innerWidth < 768));
-
-      // Constraints optimized for smooth 30 FPS without camera hardware stalls or excessive bus bandwidth
-      const constraints: MediaStreamConstraints = {
-        video: {
-          width: { ideal: 480, max: 480 },
-          height: { ideal: 360, max: 360 },
-          facingMode: 'user',
-          frameRate: { ideal: 30, max: 30 },
-        },
-        audio: false,
-      };
-
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (strictErr: any) {
-        // If user explicitly denied permission, do not retry with relaxed constraints
-        if (
-          strictErr?.name === 'NotAllowedError' ||
-          strictErr?.name === 'PermissionDeniedError' ||
-          strictErr?.message?.toLowerCase().includes('permission') ||
-          strictErr?.message?.toLowerCase().includes('not allowed')
-        ) {
-          throw strictErr;
-        }
-        // Fallback for cameras that reject specific constraint objects
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+      // Request lightweight camera stream (ideal only — avoid strict max that forces 1080p fallback)
+      const mediaPromise = (async () => {
+        const constraints: MediaStreamConstraints = {
+          video: {
+            width: { ideal: 480 },
+            height: { ideal: 360 },
+            facingMode: 'user',
+            frameRate: { ideal: 30 },
+          },
           audio: false,
-        });
-      }
+        };
+
+        try {
+          return await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (strictErr: any) {
+          if (
+            strictErr?.name === 'NotAllowedError' ||
+            strictErr?.name === 'PermissionDeniedError' ||
+            strictErr?.message?.toLowerCase().includes('permission') ||
+            strictErr?.message?.toLowerCase().includes('not allowed')
+          ) {
+            throw strictErr;
+          }
+          return await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        }
+      })();
+
+      const [, stream] = await Promise.all([this.initMediaPipe(), mediaPromise]);
 
       this.stream = stream;
       videoEl.srcObject = stream;
@@ -212,10 +220,8 @@ export class HandTrackingService {
       let status: CameraStatus = 'error';
       if (isPermissionDenied) {
         status = 'denied';
-        console.warn('Camera permission was denied or restricted by browser:', errorMsg || 'NotAllowedError');
       } else if (isNotFound) {
         status = 'unsupported';
-        console.warn('No camera hardware detected on device:', errorMsg || 'NotFoundError');
       } else {
         console.error('HandLandmarker or camera stream error:', error);
       }
@@ -231,51 +237,86 @@ export class HandTrackingService {
   }
 
   /**
-   * Smooth processing loop with rate limiter and monotonic timestamps
+   * Returns video directly if already <= 480px wide, or downscales HD streams
+   * onto a lightweight 320px canvas so MediaPipe stays fast and lag-free.
+   */
+  private getInferenceSource(video: HTMLVideoElement): HTMLVideoElement | HTMLCanvasElement {
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (!vw || !vh || vw <= 480) {
+      return video;
+    }
+
+    const targetW = 320;
+    const targetH = Math.max(180, Math.round((vh * targetW) / vw));
+
+    if (!this.inferenceCanvas) {
+      this.inferenceCanvas = document.createElement('canvas');
+      this.inferenceCtx = this.inferenceCanvas.getContext('2d', {
+        alpha: false,
+        desynchronized: true,
+      });
+    }
+
+    if (this.inferenceCanvas.width !== targetW || this.inferenceCanvas.height !== targetH) {
+      this.inferenceCanvas.width = targetW;
+      this.inferenceCanvas.height = targetH;
+    }
+
+    if (this.inferenceCtx) {
+      this.inferenceCtx.drawImage(video, 0, 0, targetW, targetH);
+      return this.inferenceCanvas;
+    }
+
+    return video;
+  }
+
+  /**
+   * Smooth processing loop synchronized to camera frames without half-FPS boundary drops
    */
   private startProcessingLoop() {
     const video = this.videoElement;
     if (!video) return;
 
     const hasRVFC = typeof (video as unknown as { requestVideoFrameCallback?: Function }).requestVideoFrameCallback === 'function';
-
-    let lastInferenceDuration = 0;
+    let smoothedInferenceMs = 10;
 
     const processTick = () => {
       if (!this.isRunning) return;
 
       const now = performance.now();
       const elapsed = now - this.lastFrameTimestamp;
-
-      // Adaptive throttle: Ensure at least 14ms of main thread idle time between inferences
-      // This prevents MediaPipe from thread-locking CPU/WebGL and allows UI/Canvas to run at 60 FPS
-      const adaptiveInterval = Math.max(this.minFrameIntervalMs, lastInferenceDuration + 14);
+      // 3ms jitter tolerance ensures 30Hz camera frames (~31-35ms) aren't skipped
+      const minInterval = Math.max(0, this.minFrameIntervalMs - 3);
+      const adaptiveInterval = smoothedInferenceMs > 26
+        ? Math.max(minInterval, smoothedInferenceMs * 1.1)
+        : minInterval;
 
       if (elapsed >= adaptiveInterval) {
         if (!this.isProcessingFrame && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && this.handLandmarker) {
           this.isProcessingFrame = true;
           this.lastFrameTimestamp = now;
 
-          // Rolling FPS metric
           this.frameCount++;
           if (now - this.lastFpsTime >= 500) {
             const rawFps = Math.round((this.frameCount * 1000) / (now - this.lastFpsTime));
-            this.currentFps = Math.min(35, Math.max(1, rawFps));
+            this.currentFps = Math.min(60, Math.max(1, rawFps));
             this.frameCount = 0;
             this.lastFpsTime = now;
           }
 
           try {
-            // Strictly monotonic timestamp for MediaPipe Tasks Vision
             const timestamp = Math.max(now, this.lastInferenceTimestamp + 1);
             this.lastInferenceTimestamp = timestamp;
 
             const tStart = performance.now();
-            const results = this.handLandmarker.detectForVideo(video, timestamp);
-            lastInferenceDuration = performance.now() - tStart;
+            const source = this.getInferenceSource(video);
+            const results = this.handLandmarker.detectForVideo(source, timestamp);
+            const duration = performance.now() - tStart;
+            smoothedInferenceMs = smoothedInferenceMs * 0.8 + duration * 0.2;
 
             this.processDetectionResult(results);
-          } catch (e) {
+          } catch {
             // Frame dropped or skipped
           } finally {
             this.isProcessingFrame = false;
@@ -283,7 +324,6 @@ export class HandTrackingService {
         }
       }
 
-      // Schedule next frame
       if (this.isRunning) {
         if (hasRVFC && 'requestVideoFrameCallback' in video) {
           this.rvfcId = (video as any).requestVideoFrameCallback(processTick);
@@ -301,24 +341,34 @@ export class HandTrackingService {
   }
 
   /**
-   * Fast, low-allocation landmark extraction and gesture classification
+   * Fast, temporally smoothed landmark extraction and 4-gesture classification
    */
   private processDetectionResult(results: HandLandmarkerResult) {
+    const now = performance.now();
+
     if (!results.landmarks || results.landmarks.length === 0 || results.landmarks[0].length === 0) {
+      if (now - this.lastHandSeenTimestamp > 260) {
+        this.landmarkSmoother.reset();
+      }
       const stableGesture = this.stabilizer.process('none');
-      const payload: HandDetectionResult = {
-        gesture: stableGesture,
-        confidence: 0,
-        indexTip: null,
-        palmCenter: null,
-        landmarks: null,
-        dominantHand: 'Unknown',
-      };
-      this.broadcastFrame(payload, results);
+      this.broadcastFrame(
+        {
+          gesture: stableGesture,
+          confidence: 0,
+          indexTip: null,
+          palmCenter: null,
+          landmarks: null,
+          dominantHand: 'Unknown',
+        },
+        results
+      );
       return;
     }
 
-    const landmarks = results.landmarks[0] as LandmarkPoint[];
+    this.lastHandSeenTimestamp = now;
+    const rawLandmarks = results.landmarks[0] as LandmarkPoint[];
+    const landmarks = this.landmarkSmoother.smooth(rawLandmarks);
+
     const handedness =
       results.handednesses && results.handednesses[0] && results.handednesses[0][0]
         ? (results.handednesses[0][0].categoryName as 'Left' | 'Right')
@@ -333,19 +383,17 @@ export class HandTrackingService {
     const rawGesture = fingerAnalysis ? classifyGesture(fingerAnalysis) : 'none';
     const stableGesture = this.stabilizer.process(rawGesture);
 
-    const indexTip = landmarks[8] || null;
-    const palmCenter = calculatePalmCenter(landmarks);
-
-    const payload: HandDetectionResult = {
-      gesture: stableGesture,
-      confidence,
-      indexTip,
-      palmCenter,
-      landmarks,
-      dominantHand: handedness,
-    };
-
-    this.broadcastFrame(payload, results);
+    this.broadcastFrame(
+      {
+        gesture: stableGesture,
+        confidence,
+        indexTip: landmarks[8] || null,
+        palmCenter: calculatePalmCenter(landmarks),
+        landmarks,
+        dominantHand: handedness,
+      },
+      results
+    );
   }
 
   private broadcastFrame(result: HandDetectionResult, rawResults?: HandLandmarkerResult) {
@@ -363,8 +411,7 @@ export class HandTrackingService {
   }
 
   /**
-   * Interactive Virtual Hand Simulator
-   * Allows testing index finger drawing and palm erasing without physical camera
+   * Interactive Virtual Hand Simulator cycling through Write, Pointer, Hold, and Erase
    */
   public startDemoSimulation() {
     this.stopCamera();
@@ -381,15 +428,16 @@ export class HandTrackingService {
       this.simAngle += 0.035;
       const angle = this.simAngle;
 
-      // Figure-8 parametric trajectory
       const centerX = 0.5 + Math.sin(angle) * 0.22;
-      const centerY = 0.45 + (Math.sin(angle * 2) * 0.16);
+      const centerY = 0.45 + Math.sin(angle * 2) * 0.16;
 
-      // Periodically switch between draw (index) and erase (palm)
+      // Cycle cleanly through the 4 core gestures: Write -> Pointer -> Hold -> Erase
       const cycle = Math.floor(angle / (Math.PI * 2)) % 4;
-      const gesture: GestureType = cycle === 3 ? 'erase' : 'draw';
+      let gesture: GestureType = 'draw';
+      if (cycle === 1) gesture = 'cursor';
+      else if (cycle === 2) gesture = 'pause';
+      else if (cycle === 3) gesture = 'erase';
 
-      // Construct synthetic 21-point hand skeleton centered on target
       const landmarks: LandmarkPoint[] = [];
       for (let i = 0; i < 21; i++) {
         const offsetX = ((i % 5) - 2) * 0.015;
@@ -401,19 +449,15 @@ export class HandTrackingService {
         });
       }
 
-      const indexTip: LandmarkPoint = { x: centerX, y: centerY, z: 0 };
-      const palmCenter: LandmarkPoint = { x: centerX, y: centerY + 0.05, z: 0 };
-
-      const payload: HandDetectionResult = {
+      this.broadcastFrame({
         gesture,
         confidence: 0.95,
-        indexTip,
-        palmCenter,
+        indexTip: { x: centerX, y: centerY, z: 0 },
+        palmCenter: { x: centerX, y: centerY + 0.05, z: 0 },
         landmarks,
         dominantHand: 'Right',
-      };
+      });
 
-      this.broadcastFrame(payload);
       this.simTimer = window.setTimeout(simLoop, 33);
     };
 
@@ -432,9 +476,6 @@ export class HandTrackingService {
     return this.isSimulating;
   }
 
-  /**
-   * Stops video stream, cancels RAF / RVFC, and frees camera tracks
-   */
   public stopCamera() {
     this.stopSimulation();
     this.isRunning = false;
@@ -464,6 +505,7 @@ export class HandTrackingService {
     }
 
     this.stabilizer.reset();
+    this.landmarkSmoother.reset();
     this.currentFps = 0;
     if (this.statusCallback) {
       this.statusCallback('idle');

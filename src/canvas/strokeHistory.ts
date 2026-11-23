@@ -2,15 +2,15 @@
  * Stroke data structure and undo/redo history manager
  */
 
-import { Stroke, StrokePoint, StrokeTool } from '../types';
+import { Stroke, StrokeTool } from '../types';
 
 export class StrokeHistory {
   private strokes: Stroke[] = [];
   private redoStack: Stroke[] = [];
   private activeStroke: Stroke | null = null;
-  private maxHistory: number = 100;
+  private maxHistory: number = 150;
 
-  constructor(maxHistory: number = 100) {
+  constructor(maxHistory: number = 150) {
     this.maxHistory = maxHistory;
   }
 
@@ -38,7 +38,6 @@ export class StrokeHistory {
     };
 
     this.activeStroke = newStroke;
-    // Starting a new stroke clears redo history
     this.redoStack = [];
     return newStroke;
   }
@@ -54,7 +53,6 @@ export class StrokeHistory {
 
     const lastPoint = this.activeStroke.points[this.activeStroke.points.length - 1];
 
-    // Filter duplicate or micro-distance points (< 0.001 normalized distance) to avoid redundant vertices
     if (lastPoint) {
       const dist = Math.hypot(normX - lastPoint.x, normY - lastPoint.y);
       if (dist < 0.001) {
@@ -80,7 +78,6 @@ export class StrokeHistory {
     const stroke = this.activeStroke;
     this.activeStroke = null;
 
-    // Only keep strokes that have points
     if (stroke.points.length > 0) {
       this.strokes.push(stroke);
       if (this.strokes.length > this.maxHistory) {
@@ -92,9 +89,6 @@ export class StrokeHistory {
     return null;
   }
 
-  /**
-   * Cancel active stroke without committing
-   */
   public cancelActiveStroke() {
     this.activeStroke = null;
   }

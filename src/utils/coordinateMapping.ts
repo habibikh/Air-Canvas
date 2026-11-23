@@ -5,60 +5,93 @@
 import { LandmarkPoint } from '../types';
 
 export interface SmoothingConfig {
-  factor: number; // 0 to 1, higher = faster response, lower = smoother
+  minCutoff: number; // Minimum cutoff frequency in Hz (lower = smoother when slow/still)
+  beta: number;      // Speed coefficient (higher = less lag during fast motion)
+  dCutoff: number;   // Derivative cutoff frequency in Hz
 }
 
-export class PointFilter {
-  private lastX: number | null = null;
-  private lastY: number | null = null;
-  private smoothingFactor: number;
+/**
+ * 1D One Euro Filter (Casiez et al., CHI 2012)
+ * Eliminates micro-tremor when stationary while staying ultra-responsive at speed.
+ */
+export class OneEuroFilter1D {
+  private xPrev: number | null = null;
+  private dxPrev: number = 0;
+  private tPrev: number | null = null;
 
-  constructor(smoothingLevel: 'low' | 'medium' | 'high' = 'medium') {
-    this.smoothingFactor = this.getFactorForLevel(smoothingLevel);
-  }
-
-  public setLevel(level: 'low' | 'medium' | 'high') {
-    this.smoothingFactor = this.getFactorForLevel(level);
-  }
-
-  private getFactorForLevel(level: 'low' | 'medium' | 'high'): number {
-    switch (level) {
-      case 'low':
-        return 0.90; // Instantaneous, near zero latency
-      case 'medium':
-        return 0.78; // Natural, highly responsive with micro-jitter rejection
-      case 'high':
-        return 0.58; // Stabilized calligraphy
-    }
-  }
-
-  public filter(rawX: number, rawY: number): { x: number; y: number } {
-    if (this.lastX === null || this.lastY === null) {
-      this.lastX = rawX;
-      this.lastY = rawY;
-      return { x: rawX, y: rawY };
+  public filter(x: number, timestampMs: number, minCutoff: number, beta: number, dCutoff: number = 1.0): number {
+    if (this.xPrev === null || this.tPrev === null) {
+      this.xPrev = x;
+      this.dxPrev = 0;
+      this.tPrev = timestampMs;
+      return x;
     }
 
-    const dx = rawX - this.lastX;
-    const dy = rawY - this.lastY;
-    const dist = Math.hypot(dx, dy);
+    // Clamp dt to [1ms, 100ms] for numerical stability (e.g. synchronous test calls or tab switches)
+    const rawDt = (timestampMs - this.tPrev) / 1000;
+    const dt = rawDt > 0.0005 ? Math.min(0.1, rawDt) : 1 / 30;
+    this.tPrev = timestampMs;
 
-    // If movement is larger than slight micro-tremor, follow quickly without lag
-    const velocityBoost = dist > 0.003 ? Math.min(0.35, dist * 10.0) : 0;
-    const dynamicFactor = Math.min(1.0, this.smoothingFactor + velocityBoost);
+    const dx = (x - this.xPrev) / dt;
+    const alphaD = this.smoothingFactor(dt, dCutoff);
+    const edx = alphaD * dx + (1 - alphaD) * this.dxPrev;
+    this.dxPrev = edx;
 
-    const smoothedX = this.lastX + dx * dynamicFactor;
-    const smoothedY = this.lastY + dy * dynamicFactor;
+    const cutoff = minCutoff + beta * Math.abs(edx);
+    const alpha = this.smoothingFactor(dt, cutoff);
+    const xHat = alpha * x + (1 - alpha) * this.xPrev;
+    this.xPrev = xHat;
 
-    this.lastX = smoothedX;
-    this.lastY = smoothedY;
+    return xHat;
+  }
 
-    return { x: smoothedX, y: smoothedY };
+  private smoothingFactor(dt: number, cutoff: number): number {
+    const r = 2 * Math.PI * cutoff * dt;
+    return r / (r + 1);
   }
 
   public reset() {
-    this.lastX = null;
-    this.lastY = null;
+    this.xPrev = null;
+    this.dxPrev = 0;
+    this.tPrev = null;
+  }
+}
+
+export class PointFilter {
+  private filterX = new OneEuroFilter1D();
+  private filterY = new OneEuroFilter1D();
+  private config: SmoothingConfig;
+
+  constructor(smoothingLevel: 'low' | 'medium' | 'high' = 'medium') {
+    this.config = this.getConfigForLevel(smoothingLevel);
+  }
+
+  public setLevel(level: 'low' | 'medium' | 'high') {
+    this.config = this.getConfigForLevel(level);
+  }
+
+  private getConfigForLevel(level: 'low' | 'medium' | 'high'): SmoothingConfig {
+    switch (level) {
+      case 'low':
+        return { minCutoff: 3.2, beta: 7.5, dCutoff: 1.5 }; // Instant low-latency tracking
+      case 'medium':
+        return { minCutoff: 1.6, beta: 4.5, dCutoff: 1.2 }; // Balanced zero-tremor & responsive curves
+      case 'high':
+        return { minCutoff: 0.9, beta: 2.5, dCutoff: 1.0 }; // Ultra-steady calligraphy stabilization
+    }
+  }
+
+  public filter(rawX: number, rawY: number, timestampMs: number = performance.now()): { x: number; y: number } {
+    const { minCutoff, beta, dCutoff } = this.config;
+    return {
+      x: this.filterX.filter(rawX, timestampMs, minCutoff, beta, dCutoff),
+      y: this.filterY.filter(rawY, timestampMs, minCutoff, beta, dCutoff),
+    };
+  }
+
+  public reset() {
+    this.filterX.reset();
+    this.filterY.reset();
   }
 }
 

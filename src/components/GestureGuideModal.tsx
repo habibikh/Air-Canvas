@@ -45,9 +45,9 @@ export const GestureGuideModal: React.FC<GestureGuideModalProps> = ({ isOpen, on
                     <Edit3 className="w-4 h-4" />
                   </div>
                 </div>
-                <h3 className="text-sm font-bold text-slate-900">Draw / Write</h3>
+                <h3 className="text-sm font-bold text-slate-900">Write</h3>
                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  Raise your <strong className="text-indigo-700">index finger</strong> with other fingers folded into a fist. Move your fingertip to write smooth lines in thin air.
+                  Raise your <strong className="text-indigo-700">index finger</strong> with other fingers folded. Move your fingertip to write smooth lines in thin air.
                 </p>
               </div>
               <div className="mt-3 pt-2.5 border-t border-indigo-100/60 flex items-center gap-2 text-[11px] font-medium text-indigo-700">
@@ -66,17 +66,17 @@ export const GestureGuideModal: React.FC<GestureGuideModalProps> = ({ isOpen, on
                     <Eraser className="w-4 h-4" />
                   </div>
                 </div>
-                <h3 className="text-sm font-bold text-slate-900">Open Palm Eraser</h3>
+                <h3 className="text-sm font-bold text-slate-900">Erase</h3>
                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  Open your <strong className="text-rose-700">entire palm</strong> with fingers spread outward. Move your hand across drawn lines to erase them progressively.
+                  Open your <strong className="text-rose-700">entire palm</strong> with fingers spread outward. Move your hand across drawn lines to erase them cleanly.
                 </p>
               </div>
               <div className="mt-3 pt-2.5 border-t border-rose-100/60 flex items-center gap-2 text-[11px] font-medium text-rose-700">
-                <span className="text-base">✋</span> All 5 Fingers Extended
+                <span className="text-base">✋</span> Open Palm
               </div>
             </div>
 
-            {/* Gesture C: Fist / Pause */}
+            {/* Gesture C: Hold */}
             <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-100/80 flex flex-col justify-between hover:shadow-sm transition-all">
               <div>
                 <div className="flex items-center justify-between mb-2.5">
@@ -87,9 +87,9 @@ export const GestureGuideModal: React.FC<GestureGuideModalProps> = ({ isOpen, on
                     <PauseCircle className="w-4 h-4" />
                   </div>
                 </div>
-                <h3 className="text-sm font-bold text-slate-900">Fist / Pause</h3>
+                <h3 className="text-sm font-bold text-slate-900">Hold</h3>
                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  Fold all four fingers into a <strong className="text-amber-700">closed fist</strong>. Drawing and erasing instantly pause without leaving marks.
+                  Fold all four fingers into a <strong className="text-amber-700">closed fist</strong>. Writing and erasing instantly hold without leaving marks.
                 </p>
               </div>
               <div className="mt-3 pt-2.5 border-t border-amber-100/60 flex items-center gap-2 text-[11px] font-medium text-amber-700">
@@ -97,7 +97,7 @@ export const GestureGuideModal: React.FC<GestureGuideModalProps> = ({ isOpen, on
               </div>
             </div>
 
-            {/* Gesture D: Two-Finger Pointer */}
+            {/* Gesture D: Pointer */}
             <div className="p-4 rounded-2xl bg-cyan-50/60 border border-cyan-100/80 flex flex-col justify-between hover:shadow-sm transition-all">
               <div>
                 <div className="flex items-center justify-between mb-2.5">
@@ -108,9 +108,9 @@ export const GestureGuideModal: React.FC<GestureGuideModalProps> = ({ isOpen, on
                     <Navigation className="w-4 h-4" />
                   </div>
                 </div>
-                <h3 className="text-sm font-bold text-slate-900">Pointer Mode</h3>
+                <h3 className="text-sm font-bold text-slate-900">Pointer</h3>
                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  Raise <strong className="text-cyan-700">both index and middle fingers</strong> (peace sign). Move the cursor freely without drawing to reposition your hand.
+                  Raise <strong className="text-cyan-700">both index and middle fingers</strong>. Move the pointer freely without drawing to reposition your hand.
                 </p>
               </div>
               <div className="mt-3 pt-2.5 border-t border-cyan-100/60 flex items-center gap-2 text-[11px] font-medium text-cyan-700">

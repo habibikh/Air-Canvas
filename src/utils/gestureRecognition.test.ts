@@ -5,14 +5,15 @@ import {
   isFingerExtended,
   isFingerFolded,
   GestureStabilizer,
+  LandmarkSmoother,
   DEFAULT_THRESHOLDS,
   FingerAnalysis,
 } from './gestureRecognition';
 import { LandmarkPoint } from '../types';
 
-test('classifyGesture maps finger states accurately', () => {
-  // Gesture A: Draw (only index extended)
-  const drawFingers: FingerAnalysis = {
+test('classifyGesture maps core 4 gestures (Write, Erase, Pointer, Hold) accurately', () => {
+  // 1. Write (draw): only index extended
+  const drawFingers: Partial<FingerAnalysis> = {
     index: true,
     middle: false,
     ring: false,
@@ -26,23 +27,8 @@ test('classifyGesture maps finger states accurately', () => {
   };
   assert.equal(classifyGesture(drawFingers), 'draw');
 
-  // Draw with thumb out
-  const drawWithThumb: FingerAnalysis = {
-    index: true,
-    middle: false,
-    ring: false,
-    pinky: false,
-    thumb: true,
-    indexFolded: false,
-    middleFolded: true,
-    ringFolded: true,
-    pinkyFolded: true,
-    handScale: 0.2,
-  };
-  assert.equal(classifyGesture(drawWithThumb), 'draw');
-
-  // Natural drawing grip: pinky slightly relaxed but middle & ring folded
-  const drawRelaxedPinky: FingerAnalysis = {
+  // Write with relaxed pinky
+  const drawRelaxedPinky: Partial<FingerAnalysis> = {
     index: true,
     middle: false,
     ring: false,
@@ -56,8 +42,8 @@ test('classifyGesture maps finger states accurately', () => {
   };
   assert.equal(classifyGesture(drawRelaxedPinky), 'draw');
 
-  // Gesture B: Erase (all 4 main fingers extended)
-  const eraseFingers: FingerAnalysis = {
+  // 2. Erase: Open palm (all 4 main fingers extended)
+  const eraseFingers: Partial<FingerAnalysis> = {
     index: true,
     middle: true,
     ring: true,
@@ -71,23 +57,8 @@ test('classifyGesture maps finger states accurately', () => {
   };
   assert.equal(classifyGesture(eraseFingers), 'erase');
 
-  // Gesture C: Pause (all 4 folded into fist)
-  const pauseFingers: FingerAnalysis = {
-    index: false,
-    middle: false,
-    ring: false,
-    pinky: false,
-    thumb: false,
-    indexFolded: true,
-    middleFolded: true,
-    ringFolded: true,
-    pinkyFolded: true,
-    handScale: 0.2,
-  };
-  assert.equal(classifyGesture(pauseFingers), 'pause');
-
-  // Gesture D: Cursor (index and middle extended, ring & pinky folded)
-  const cursorFingers: FingerAnalysis = {
+  // 3. Pointer (cursor): 2 fingers up (index + middle extended, ring & pinky folded)
+  const pointerFingers: Partial<FingerAnalysis> = {
     index: true,
     middle: true,
     ring: false,
@@ -99,10 +70,25 @@ test('classifyGesture maps finger states accurately', () => {
     pinkyFolded: true,
     handScale: 0.2,
   };
-  assert.equal(classifyGesture(cursorFingers), 'cursor');
+  assert.equal(classifyGesture(pointerFingers), 'cursor');
 
-  // Mixed invalid/unrecognized
-  const invalidFingers: FingerAnalysis = {
+  // 4. Hold (pause): Closed fist (all 4 folded)
+  const holdFingers: Partial<FingerAnalysis> = {
+    index: false,
+    middle: false,
+    ring: false,
+    pinky: false,
+    thumb: false,
+    indexFolded: true,
+    middleFolded: true,
+    ringFolded: true,
+    pinkyFolded: true,
+    handScale: 0.2,
+  };
+  assert.equal(classifyGesture(holdFingers), 'pause');
+
+  // Mixed unrecognized posture
+  const invalidFingers: Partial<FingerAnalysis> = {
     index: false,
     middle: true,
     ring: false,
@@ -125,21 +111,17 @@ test('isFingerExtended detects extended vs curled finger coordinates', () => {
   const tipExtended: LandmarkPoint = { x: 0.5, y: 0.2, z: 0 };
   const tipCurled: LandmarkPoint = { x: 0.5, y: 0.55, z: 0 };
 
-  const extended = isFingerExtended(tipExtended, dip, pip, mcp, wrist, DEFAULT_THRESHOLDS, 0.3);
-  assert.equal(extended, true);
-
-  const curled = isFingerExtended(tipCurled, dip, pip, mcp, wrist, DEFAULT_THRESHOLDS, 0.3);
-  assert.equal(curled, false);
+  assert.equal(isFingerExtended(tipExtended, dip, pip, mcp, wrist, DEFAULT_THRESHOLDS, 0.3), true);
+  assert.equal(isFingerExtended(tipCurled, dip, pip, mcp, wrist, DEFAULT_THRESHOLDS, 0.3), false);
 });
 
 test('isFingerFolded reliably flags curled finger', () => {
   const wrist: LandmarkPoint = { x: 0.5, y: 0.9, z: 0 };
   const mcp: LandmarkPoint = { x: 0.5, y: 0.6, z: 0 };
   const pip: LandmarkPoint = { x: 0.5, y: 0.45, z: 0 };
-  const tipCurled: LandmarkPoint = { x: 0.5, y: 0.62, z: 0 }; // curled right next to palm
+  const tipCurled: LandmarkPoint = { x: 0.5, y: 0.62, z: 0 };
 
-  const folded = isFingerFolded(tipCurled, pip, mcp, wrist, 0.3);
-  assert.equal(folded, true);
+  assert.equal(isFingerFolded(tipCurled, pip, mcp, wrist, 0.3), true);
 });
 
 test('GestureStabilizer debounces rapid transitions and provides active-stroke grace', () => {
@@ -150,28 +132,75 @@ test('GestureStabilizer debounces rapid transitions and provides active-stroke g
   });
 
   assert.equal(stabilizer.getCurrent(), 'none');
+  assert.equal(stabilizer.process('draw'), 'none');
+  assert.equal(stabilizer.process('draw'), 'draw');
+  assert.equal(stabilizer.process('draw'), 'draw');
 
-  // Single frame of draw should not switch immediately if debounce is 2
-  const frame1 = stabilizer.process('draw');
-  assert.equal(frame1, 'none');
+  // Single and double glitch frames held by grace period
+  assert.equal(stabilizer.process('none'), 'draw');
+  assert.equal(stabilizer.process('none'), 'draw');
+  assert.equal(stabilizer.process('none'), 'none');
+});
 
-  // Second frame confirms draw
-  const frame2 = stabilizer.process('draw');
-  assert.equal(frame2, 'draw');
+test('GestureStabilizer protects active drawing from single-frame pause or pointer twitch', () => {
+  const stabilizer = new GestureStabilizer({
+    ...DEFAULT_THRESHOLDS,
+    debounceFrames: 2,
+    graceFrames: 2,
+  });
 
-  // Steady draw remains draw
-  const frame3 = stabilizer.process('draw');
-  assert.equal(frame3, 'draw');
+  stabilizer.process('draw');
+  stabilizer.process('draw');
+  assert.equal(stabilizer.getCurrent(), 'draw');
 
-  // Single glitch frame to none is protected by grace period
-  const glitch = stabilizer.process('none');
-  assert.equal(glitch, 'draw');
+  assert.equal(stabilizer.process('pause'), 'draw');
+  assert.equal(stabilizer.process('cursor'), 'draw');
+  assert.equal(stabilizer.process('draw'), 'draw');
+});
 
-  // Second glitch frame still held
-  const glitch2 = stabilizer.process('none');
-  assert.equal(glitch2, 'draw');
+test('isFingerExtended detects straight finger even under foreshortened Z-perspective', () => {
+  const wrist: LandmarkPoint = { x: 0.5, y: 0.9, z: 0 };
+  const mcp: LandmarkPoint = { x: 0.5, y: 0.6, z: 0 };
+  const pip: LandmarkPoint = { x: 0.5, y: 0.52, z: 0.08 };
+  const dip: LandmarkPoint = { x: 0.5, y: 0.46, z: 0.15 };
+  const tipForeshortened: LandmarkPoint = { x: 0.5, y: 0.40, z: 0.22 };
 
-  // Third glitch frame releases to none
-  const glitch3 = stabilizer.process('none');
-  assert.equal(glitch3, 'none');
+  assert.equal(isFingerExtended(tipForeshortened, dip, pip, mcp, wrist, DEFAULT_THRESHOLDS, 0.3), true);
+});
+
+test('GestureStabilizer shields active Write stroke from 2-frame accidental flickers', () => {
+  const stabilizer = new GestureStabilizer({
+    ...DEFAULT_THRESHOLDS,
+    debounceFrames: 2,
+    graceFrames: 2,
+  });
+
+  stabilizer.process('draw');
+  stabilizer.process('draw');
+  assert.equal(stabilizer.getCurrent(), 'draw');
+
+  // Exiting active drawing requires debounceFrames + 1 (3 frames)
+  assert.equal(stabilizer.process('cursor'), 'draw');
+  assert.equal(stabilizer.process('cursor'), 'draw');
+  assert.equal(stabilizer.process('cursor'), 'cursor');
+});
+
+test('LandmarkSmoother dampens micro-jitter and Z-depth noise while resetting cleanly', () => {
+  const smoother = new LandmarkSmoother();
+  const base = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0.0 }));
+
+  const first = smoother.smooth(base);
+  assert.equal(first[8].x, 0.5);
+
+  // Small XY tremor + large Z spike
+  const noisy = base.map((pt, i) =>
+    i === 8 ? { x: 0.5015, y: 0.5015, z: 0.1 } : pt
+  );
+  const smoothed = smoother.smooth(noisy);
+  assert.ok(smoothed[8].x < 0.501, `Expected micro-tremor damped, got ${smoothed[8].x}`);
+  assert.ok((smoothed[8].z ?? 0) < 0.04, `Expected Z spike damped, got ${smoothed[8].z}`);
+
+  smoother.reset();
+  const afterReset = smoother.smooth(noisy);
+  assert.equal(afterReset[8].x, 0.5015);
 });

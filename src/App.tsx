@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { CanvasSettings, GridStyle, StrokeTool, ToastMessage } from './types';
 import { useHandTracking } from './hooks/useHandTracking';
 import { StrokeHistory } from './canvas/strokeHistory';
@@ -12,17 +12,29 @@ import { Header } from './components/Header';
 import { Toolbar } from './components/Toolbar';
 import { Whiteboard } from './components/Whiteboard';
 import { WebcamPreview } from './components/WebcamPreview';
-import { GestureGuideModal } from './components/GestureGuideModal';
-import { SettingsModal } from './components/SettingsModal';
-import { ClearConfirmModal } from './components/ClearConfirmModal';
-import { LogoPreviewModal } from './components/LogoPreviewModal';
 import { CameraPermissionPrompt } from './components/CameraPermissionPrompt';
-import { ExportModal } from './components/ExportModal';
-import { GestureCoach } from './components/GestureCoach';
 import { ToastContainer } from './components/Toast';
 import { soundEffects } from './services/soundEffects';
+import { handTrackingService } from './services/handTrackingService';
 
-const STORAGE_KEY = 'aircanvas_settings_v2';
+// Lazy-load secondary modals & optional overlays for ultra-fast initial page boot
+const GestureGuideModal = lazy(() =>
+  import('./components/GestureGuideModal').then((m) => ({ default: m.GestureGuideModal }))
+);
+const SettingsModal = lazy(() =>
+  import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal }))
+);
+const ClearConfirmModal = lazy(() =>
+  import('./components/ClearConfirmModal').then((m) => ({ default: m.ClearConfirmModal }))
+);
+const ExportModal = lazy(() =>
+  import('./components/ExportModal').then((m) => ({ default: m.ExportModal }))
+);
+const GestureCoach = lazy(() =>
+  import('./components/GestureCoach').then((m) => ({ default: m.GestureCoach }))
+);
+
+const STORAGE_KEY = 'aircanvas_settings_v3';
 
 const DEFAULT_SETTINGS: CanvasSettings = {
   gridStyle: 'dots',
@@ -36,14 +48,12 @@ const DEFAULT_SETTINGS: CanvasSettings = {
   webcamOpacity: 0.85,
   mirrorTracking: true,
   autoConnectCamera: false,
-  showGestureCoach: true,
-  showCursorTrail: true,
-  targetFps: 35,
+  showGestureCoach: false,
+  targetFps: 45,
   skeletonOnlyMode: false,
 };
 
 export default function App() {
-  // Settings with localStorage persistence
   const [settings, setSettings] = useState<CanvasSettings>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -56,12 +66,21 @@ export default function App() {
     return DEFAULT_SETTINGS;
   });
 
-  // Sync target FPS to tracking service
+  // Sync target FPS & gently warm up MediaPipe module after initial paint
   useEffect(() => {
-    import('./services/handTrackingService').then(({ handTrackingService }) => {
-      handTrackingService.setTargetMaxFps(settings.targetFps || 35);
-    });
+    handTrackingService.setTargetMaxFps(settings.targetFps || 45);
   }, [settings.targetFps]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const ric = (window as any).requestIdleCallback as ((cb: () => void, opts?: { timeout: number }) => number) | undefined;
+    if (ric) {
+      const id = ric(() => handTrackingService.preloadModule(), { timeout: 1500 });
+      return () => (window as any).cancelIdleCallback?.(id);
+    }
+    const timer = window.setTimeout(() => handTrackingService.preloadModule(), 900);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const updateSettings = useCallback((newPartial: Partial<CanvasSettings>) => {
     setSettings((prev) => {
@@ -84,20 +103,16 @@ export default function App() {
     }
   }, []);
 
-  // Tool states
   const [currentTool, setCurrentTool] = useState<StrokeTool>('pen');
   const [canUndo, setCanUndo] = useState<boolean>(false);
   const [canRedo, setCanRedo] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-  // Modals state
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isClearModalOpen, setIsClearModalOpen] = useState<boolean>(false);
-  const [isLogoPreviewOpen, setIsLogoPreviewOpen] = useState<boolean>(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
-  // Toast notifications state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const addToast = useCallback((title: string, description?: string, type?: 'info' | 'success' | 'warning') => {
@@ -114,7 +129,6 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Onboarding prompt state
   const [showPrompt, setShowPrompt] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -125,12 +139,10 @@ export default function App() {
     return true;
   });
 
-  // Canvas and Engine instances
   const strokeHistoryRef = useRef<StrokeHistory>(new StrokeHistory(150));
   const engineRef = useRef<DrawingEngine | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Hand tracking hook
   const {
     cameraStatus,
     errorMessage,
@@ -150,13 +162,12 @@ export default function App() {
     setCanRedo(strokeHistoryRef.current.canRedo());
   }, []);
 
-  // Handle camera start with error checking
   const handleStartCamera = useCallback(async () => {
     if (videoRef.current) {
       const res = await startCamera(videoRef.current);
       if (res.success) {
         setShowPrompt(false);
-        addToast('Camera Live', 'Index finger draws, open palm erases', 'success');
+        addToast('Camera Live', '1 finger writes, open palm erases, 2 fingers point, fist holds', 'success');
       } else {
         if (res.isDenied) {
           addToast('Camera Blocked', 'Allow camera in browser address bar, or draw with mouse/touch', 'info');
@@ -167,34 +178,28 @@ export default function App() {
     }
   }, [startCamera, addToast]);
 
-  // Handle interactive demo simulation
   const handleStartDemo = useCallback(() => {
     startDemoSimulation();
     setShowPrompt(false);
-    addToast('Interactive Demo Live', 'Simulating index-finger drawing and palm erasing cycle', 'info');
+    addToast('Interactive Demo Live', 'Simulating write, pointer, hold, and erase cycle', 'info');
   }, [startDemoSimulation, addToast]);
 
   const handleToggleCamera = useCallback(async () => {
     if (cameraStatus === 'active') {
       stopCamera();
       addToast('Camera Inactive', 'Air tracking stopped. Mouse/touch is still active.', 'info');
-    } else {
-      if (videoRef.current) {
-        const res = await startCamera(videoRef.current);
-        if (res.success) {
-          addToast('Camera Live', 'Gesture tracking active', 'success');
-        } else {
-          if (res.isDenied) {
-            addToast('Camera Blocked', 'Click the lock icon in your address bar to allow camera.', 'info');
-          } else {
-            addToast('Camera Unavailable', res.error || 'Check camera permissions or use Demo Mode', 'warning');
-          }
-        }
+    } else if (videoRef.current) {
+      const res = await startCamera(videoRef.current);
+      if (res.success) {
+        addToast('Camera Live', 'Gesture tracking active', 'success');
+      } else if (res.isDenied) {
+        addToast('Camera Blocked', 'Click the lock icon in your address bar to allow camera.', 'info');
+      } else {
+        addToast('Camera Unavailable', res.error || 'Check camera permissions or use Demo Mode', 'warning');
       }
     }
   }, [cameraStatus, startCamera, stopCamera, addToast]);
 
-  // Undo / Redo actions
   const handleUndo = useCallback(() => {
     const undone = strokeHistoryRef.current.undo();
     if (undone) {
@@ -217,7 +222,6 @@ export default function App() {
     }
   }, [syncUndoRedo, addToast]);
 
-  // Clear action
   const handleConfirmClear = useCallback(() => {
     strokeHistoryRef.current.clear();
     soundEffects.playPop();
@@ -228,13 +232,11 @@ export default function App() {
     addToast('Whiteboard Cleared', 'Press Ctrl+Z if you want to undo', 'warning');
   }, [syncUndoRedo, addToast]);
 
-  // Open Export Modal
   const handleOpenExport = useCallback(() => {
     soundEffects.playPop();
     setIsExportModalOpen(true);
   }, []);
 
-  // Audio Toggle
   const handleToggleSound = useCallback(() => {
     const newState = !settings.soundEnabled;
     updateSettings({ soundEnabled: newState });
@@ -247,18 +249,14 @@ export default function App() {
     }
   }, [settings.soundEnabled, updateSettings, addToast]);
 
-  // Fullscreen toggle
   const handleToggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
-      }
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
     }
   }, []);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
@@ -277,8 +275,6 @@ export default function App() {
         handleRedo();
       } else if (e.key.toLowerCase() === 'p') {
         setCurrentTool('pen');
-      } else if (e.key.toLowerCase() === 'h') {
-        setCurrentTool('highlighter');
       } else if (e.key.toLowerCase() === 'e') {
         setCurrentTool('eraser');
       } else if (e.key === '?') {
@@ -290,7 +286,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleUndo, handleRedo]);
 
-  // Sync fullscreen change event
   useEffect(() => {
     const handleFsChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -299,19 +294,17 @@ export default function App() {
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
 
-  // Toggle Skeleton Only (Hide Video in Blank Area)
   const handleToggleSkeletonOnly = useCallback(() => {
     const next = !settings.skeletonOnlyMode;
     updateSettings({ skeletonOnlyMode: next });
     soundEffects.playPop();
     addToast(
       next ? 'Hand Traced Only' : 'Camera Video Visible',
-      next ? 'Camera room background hidden in blank area' : 'Live webcam feed restored',
+      next ? 'Camera room background hidden' : 'Live webcam feed restored',
       'info'
     );
   }, [settings.skeletonOnlyMode, updateSettings, addToast]);
 
-  // Memoized handlers for Toolbar & Header to avoid React re-render thrashing
   const handleSelectTool = useCallback((tool: StrokeTool) => {
     setCurrentTool(tool);
     soundEffects.playPop();
@@ -343,23 +336,16 @@ export default function App() {
   const handleOpenClearModal = useCallback(() => setIsClearModalOpen(true), []);
   const handleOpenGuideModal = useCallback(() => setIsGuideOpen(true), []);
   const handleOpenSettingsModal = useCallback(() => setIsSettingsOpen(true), []);
-  const handleOpenLogoModal = useCallback(() => setIsLogoPreviewOpen(true), []);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#fbf8fc] text-[#1b1b1e]">
       {/* Top Application Header */}
       <Header
-        cameraStatus={cameraStatus}
-        currentGesture={currentGesture}
-        fps={fps}
-        confidence={confidence}
-        isHandDetected={isHandDetected}
         canUndo={canUndo}
         canRedo={canRedo}
         isFullscreen={isFullscreen}
         showGestureCoach={settings.showGestureCoach}
         skeletonOnlyMode={settings.skeletonOnlyMode}
-        onToggleCamera={handleToggleCamera}
         onToggleCoach={handleToggleCoach}
         onToggleSkeletonOnly={handleToggleSkeletonOnly}
         onUndo={handleUndo}
@@ -369,7 +355,6 @@ export default function App() {
         onToggleFullscreen={handleToggleFullscreen}
         onOpenGuide={handleOpenGuideModal}
         onOpenSettings={handleOpenSettingsModal}
-        onOpenLogoPreview={handleOpenLogoModal}
       />
 
       {/* Floating Webcam Preview HUD */}
@@ -387,6 +372,19 @@ export default function App() {
         videoRef={videoRef}
         registerFrameListener={registerFrameListener}
       />
+
+      {/* Optional Gesture Coach */}
+      {settings.showGestureCoach && (
+        <Suspense fallback={null}>
+          <GestureCoach
+            cameraStatus={cameraStatus}
+            currentGesture={currentGesture}
+            isHandDetected={isHandDetected}
+            onOpenGuide={handleOpenGuideModal}
+            onDismiss={() => updateSettings({ showGestureCoach: false })}
+          />
+        </Suspense>
+      )}
 
       {/* Interactive Main Whiteboard Canvas */}
       <Whiteboard
@@ -418,17 +416,6 @@ export default function App() {
         onToggleSound={handleToggleSound}
       />
 
-      {/* Real-Time Gesture Coach Assistant */}
-      {settings.showGestureCoach && (
-        <GestureCoach
-          cameraStatus={cameraStatus}
-          currentGesture={currentGesture}
-          isHandDetected={isHandDetected}
-          onOpenGuide={() => setIsGuideOpen(true)}
-          onDismiss={() => updateSettings({ showGestureCoach: false })}
-        />
-      )}
-
       {/* Toast Notification Container */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
@@ -443,42 +430,42 @@ export default function App() {
         />
       )}
 
-      {/* Gesture Guide Modal */}
-      <GestureGuideModal
-        isOpen={isGuideOpen}
-        onClose={() => setIsGuideOpen(false)}
-      />
+      {/* Lazy-Loaded Modals */}
+      <Suspense fallback={null}>
+        {isGuideOpen && (
+          <GestureGuideModal
+            isOpen={isGuideOpen}
+            onClose={() => setIsGuideOpen(false)}
+          />
+        )}
 
-      {/* Settings Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        settings={settings}
-        onUpdateSettings={updateSettings}
-        onResetSettings={resetSettings}
-      />
+        {isSettingsOpen && (
+          <SettingsModal
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            settings={settings}
+            onUpdateSettings={updateSettings}
+            onResetSettings={resetSettings}
+          />
+        )}
 
-      {/* Clear Confirmation Modal */}
-      <ClearConfirmModal
-        isOpen={isClearModalOpen}
-        onConfirm={handleConfirmClear}
-        onCancel={() => setIsClearModalOpen(false)}
-      />
+        {isClearModalOpen && (
+          <ClearConfirmModal
+            isOpen={isClearModalOpen}
+            onConfirm={handleConfirmClear}
+            onCancel={() => setIsClearModalOpen(false)}
+          />
+        )}
 
-      {/* Brand Logo & Identity Preview Modal */}
-      <LogoPreviewModal
-        isOpen={isLogoPreviewOpen}
-        onClose={() => setIsLogoPreviewOpen(false)}
-        onNotify={(msg) => addToast('Logo Asset', msg, 'success')}
-      />
-
-      {/* Export Canvas Modal */}
-      <ExportModal
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        engine={engineRef.current}
-        onNotify={(msg, type) => addToast('Export Canvas', msg, type)}
-      />
+        {isExportModalOpen && (
+          <ExportModal
+            isOpen={isExportModalOpen}
+            onClose={() => setIsExportModalOpen(false)}
+            engine={engineRef.current}
+            onNotify={(msg, type) => addToast('Export Canvas', msg, type)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

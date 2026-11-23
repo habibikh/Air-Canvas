@@ -1,10 +1,10 @@
 /**
  * High-performance, multi-layered HTML Canvas drawing engine for AirCanvas
- * Completely isolates ink from background so eraser strokes NEVER punch holes
- * or leave visible marks in the canvas or exported PNG.
+ * Completely isolates ink from background so eraser strokes NEVER leave marks
+ * in the canvas or exported PNG.
  */
 
-import { GridStyle, Stroke, StrokePoint } from '../types';
+import { GridStyle, Stroke } from '../types';
 import { StrokeHistory } from './strokeHistory';
 
 export interface ExportOptions {
@@ -29,7 +29,7 @@ export class DrawingEngine {
   private bgCtx: CanvasRenderingContext2D;
   private isBgDirty: boolean = true;
 
-  // 2. Pure Ink layer canvas (transparent background, contains only ink + destination-out erasers)
+  // 2. Pure Ink layer canvas (transparent background, contains only pen + destination-out erasers)
   private inkCanvas: HTMLCanvasElement;
   private inkCtx: CanvasRenderingContext2D;
   private isInkDirty: boolean = true;
@@ -43,6 +43,9 @@ export class DrawingEngine {
   private compositeCtx: CanvasRenderingContext2D;
   private isCompositeDirty: boolean = true;
 
+  // Cached 24x24 dot pattern tile for instant dot grid rendering
+  private dotPatternCanvas: HTMLCanvasElement | null = null;
+
   constructor(canvas: HTMLCanvasElement, history: StrokeHistory) {
     this.canvas = canvas;
     const context = canvas.getContext('2d', { willReadFrequently: false, alpha: false });
@@ -52,25 +55,21 @@ export class DrawingEngine {
     this.ctx = context;
     this.history = history;
 
-    // Background canvas
     this.bgCanvas = document.createElement('canvas');
     const bg = this.bgCanvas.getContext('2d', { willReadFrequently: false, alpha: false });
     if (!bg) throw new Error('Background canvas 2D context not available');
     this.bgCtx = bg;
 
-    // Ink canvas (must have alpha: true to support transparent background and destination-out)
     this.inkCanvas = document.createElement('canvas');
     const ink = this.inkCanvas.getContext('2d', { willReadFrequently: false, alpha: true });
     if (!ink) throw new Error('Ink canvas 2D context not available');
     this.inkCtx = ink;
 
-    // Scratch canvas for active eraser compositing
     this.scratchCanvas = document.createElement('canvas');
     const scratch = this.scratchCanvas.getContext('2d', { willReadFrequently: false, alpha: true });
     if (!scratch) throw new Error('Scratch canvas 2D context not available');
     this.scratchCtx = scratch;
 
-    // Composite canvas for 1-blit render during active drawing
     this.compositeCanvas = document.createElement('canvas');
     const comp = this.compositeCanvas.getContext('2d', { willReadFrequently: false, alpha: false });
     if (!comp) throw new Error('Composite canvas 2D context not available');
@@ -106,7 +105,6 @@ export class DrawingEngine {
       (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
         clientWidth < 768);
 
-    // DPR capped at 1.5x (1.25x on mobile) for razor-sharp visuals while cutting memory by 50-60%
     this.dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.25 : 1.5);
     this.width = clientWidth;
     this.height = clientHeight;
@@ -147,9 +145,6 @@ export class DrawingEngine {
     });
   }
 
-  /**
-   * Rebuilds the background canvas (grid / pattern)
-   */
   private rebuildBackground() {
     const { bgCtx: ctx, dpr, width, height } = this;
     if (width === 0 || height === 0) return;
@@ -163,17 +158,10 @@ export class DrawingEngine {
     this.isCompositeDirty = true;
   }
 
-  /**
-   * Rebuilds the committed ink layer.
-   * Renders committed ink strokes with source-over and eraser strokes with destination-out.
-   * Because inkCanvas is isolated and transparent, destination-out erases ONLY the ink.
-   * It never touches the background or leaves white/black marks.
-   */
   private rebuildInk() {
     const { inkCtx: ctx, dpr, width, height } = this;
     if (width === 0 || height === 0) return;
 
-    // Clear ink canvas to completely transparent
     ctx.clearRect(0, 0, this.inkCanvas.width, this.inkCanvas.height);
 
     ctx.save();
@@ -189,21 +177,12 @@ export class DrawingEngine {
     this.isCompositeDirty = true;
   }
 
-  /**
-   * Merges background and committed ink onto compositeCanvas
-   * Done only when background or committed ink changes, NEVER on active stroke frames!
-   */
   private rebuildComposite() {
     this.compositeCtx.drawImage(this.bgCanvas, 0, 0);
     this.compositeCtx.drawImage(this.inkCanvas, 0, 0);
     this.isCompositeDirty = false;
   }
 
-  /**
-   * Ultra-fast 60 FPS composite render:
-   * 1. 1 GPU blit of pre-composited (background + ink) canvas
-   * 2. Render only the active stroke currently in progress
-   */
   public render() {
     const { ctx, dpr, width, height } = this;
     if (width === 0 || height === 0) return;
@@ -220,13 +199,11 @@ export class DrawingEngine {
 
     const activeStroke = this.history.getActiveStroke();
 
-    // 1. Single GPU blit of pre-composited canvas (no active stroke)
     if (!activeStroke) {
       ctx.drawImage(this.compositeCanvas, 0, 0);
       return;
     }
 
-    // 2. Active stroke is an eraser: apply onto scratch and composite
     if (activeStroke.tool === 'eraser') {
       const sCtx = this.scratchCtx;
       sCtx.clearRect(0, 0, this.scratchCanvas.width, this.scratchCanvas.height);
@@ -242,19 +219,31 @@ export class DrawingEngine {
       return;
     }
 
-    // 3. Active stroke is a drawing tool (pen/highlighter/shape):
-    // Single blit of composite canvas + draw active stroke on top!
     ctx.drawImage(this.compositeCanvas, 0, 0);
-
     ctx.save();
     ctx.scale(dpr, dpr);
     this.renderStroke(ctx, activeStroke, width, height);
     ctx.restore();
   }
 
-  /**
-   * Draw background grid (clean white, dots, lines, ruled, or blueprint)
-   */
+  private getDotPatternCanvas(): HTMLCanvasElement {
+    if (this.dotPatternCanvas) return this.dotPatternCanvas;
+    const tile = document.createElement('canvas');
+    tile.width = 24;
+    tile.height = 24;
+    const tCtx = tile.getContext('2d');
+    if (tCtx) {
+      tCtx.fillStyle = '#ffffff';
+      tCtx.fillRect(0, 0, 24, 24);
+      tCtx.fillStyle = '#cbd5e1';
+      tCtx.beginPath();
+      tCtx.arc(12, 12, 1.25, 0, Math.PI * 2);
+      tCtx.fill();
+    }
+    this.dotPatternCanvas = tile;
+    return tile;
+  }
+
   private drawBackgroundGrid(
     ctx: CanvasRenderingContext2D,
     width: number,
@@ -262,10 +251,10 @@ export class DrawingEngine {
     style: GridStyle
   ) {
     if (style === 'blueprint') {
-      ctx.fillStyle = '#1e293b'; // Slate 800
+      ctx.fillStyle = '#1e293b';
       ctx.fillRect(0, 0, width, height);
 
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.16)'; // Cyan grid
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.16)';
       ctx.lineWidth = 1;
       const step = 28;
       ctx.beginPath();
@@ -296,10 +285,9 @@ export class DrawingEngine {
       }
       ctx.stroke();
     } else if (style === 'ruled') {
-      ctx.fillStyle = '#fdfbf7'; // Warm notebook tint
+      ctx.fillStyle = '#fdfbf7';
       ctx.fillRect(0, 0, width, height);
 
-      // Pink left margin
       ctx.strokeStyle = '#fca5a5';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -307,7 +295,6 @@ export class DrawingEngine {
       ctx.lineTo(64, height);
       ctx.stroke();
 
-      // Horizontal ruled lines
       ctx.strokeStyle = '#cbd5e1';
       ctx.lineWidth = 1;
       const lineSpacing = 32;
@@ -318,30 +305,24 @@ export class DrawingEngine {
       }
       ctx.stroke();
     } else if (style === 'dots') {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, width, height);
-
-      ctx.fillStyle = '#cbd5e1';
-      const step = 24;
-      const radius = 1.25;
-      for (let x = step; x < width; x += step) {
-        for (let y = step; y < height; y += step) {
-          ctx.beginPath();
-          ctx.arc(x, y, radius, 0, Math.PI * 2);
-          ctx.fill();
-        }
+      const pattern = ctx.createPattern(this.getDotPatternCanvas(), 'repeat');
+      if (pattern) {
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, width, height);
+      } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
       }
     } else {
-      // Blank clean white
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, width, height);
     }
   }
 
   /**
-   * Render a single stroke with smooth quadratic curve interpolation or shape geometry
+   * Render a single pen or eraser stroke with smooth quadratic curve interpolation
    */
-  private renderStroke(
+  public renderStroke(
     ctx: CanvasRenderingContext2D,
     stroke: Stroke,
     width: number,
@@ -356,74 +337,27 @@ export class DrawingEngine {
     ctx.lineWidth = stroke.size;
 
     if (stroke.tool === 'eraser') {
-      // Pure destination-out erasing: reduces ink opacity to 0
       ctx.globalCompositeOperation = 'destination-out';
       ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
       ctx.fillStyle = 'rgba(0, 0, 0, 1)';
-    } else if (stroke.tool === 'highlighter') {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 0.35;
-      ctx.strokeStyle = stroke.color;
-      ctx.lineWidth = stroke.size * 2.2;
     } else {
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1.0;
       ctx.strokeStyle = stroke.color;
+      ctx.fillStyle = stroke.color;
     }
 
     const p0 = points[0];
     const pLast = points[points.length - 1];
 
     if (points.length === 1) {
-      // Single dot tap
-      const px = p0.x * width;
-      const py = p0.y * height;
       ctx.beginPath();
-      ctx.arc(px, py, stroke.size / 2, 0, Math.PI * 2);
+      ctx.arc(p0.x * width, p0.y * height, stroke.size / 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       return;
     }
 
-    // Specialized geometry shapes
-    if (stroke.tool === 'line') {
-      ctx.beginPath();
-      ctx.moveTo(p0.x * width, p0.y * height);
-      ctx.lineTo(pLast.x * width, pLast.y * height);
-      ctx.stroke();
-      ctx.restore();
-      return;
-    }
-
-    if (stroke.tool === 'rectangle') {
-      const x1 = p0.x * width;
-      const y1 = p0.y * height;
-      const x2 = pLast.x * width;
-      const y2 = pLast.y * height;
-      ctx.beginPath();
-      ctx.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
-      ctx.stroke();
-      ctx.restore();
-      return;
-    }
-
-    if (stroke.tool === 'circle') {
-      const x1 = p0.x * width;
-      const y1 = p0.y * height;
-      const x2 = pLast.x * width;
-      const y2 = pLast.y * height;
-      const cx = (x1 + x2) / 2;
-      const cy = (y1 + y2) / 2;
-      const rx = Math.max(1, Math.abs(x2 - x1) / 2);
-      const ry = Math.max(1, Math.abs(y2 - y1) / 2);
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-      return;
-    }
-
-    // Freehand pen & highlighter with quadratic bezier curve interpolation
     ctx.beginPath();
     ctx.moveTo(p0.x * width, p0.y * height);
 
@@ -453,15 +387,6 @@ export class DrawingEngine {
     ctx.restore();
   }
 
-  /**
-   * Export the whiteboard drawing to clean PNG.
-   *
-   * Crucial Fix for Eraser Marks:
-   * 1. Render all strokes onto an isolated transparent ink layer. Erasers apply with destination-out,
-   *    erasing only the ink without touching any background.
-   * 2. Composite that isolated ink layer onto a clean opaque background (or leave transparent).
-   * Result: ONLY the visible writings exist. ZERO eraser marks, ZERO transparent holes or white streaks.
-   */
   public exportToPNG(options: ExportOptions = {}): string {
     const {
       includeGrid = false,
@@ -472,14 +397,12 @@ export class DrawingEngine {
     const exportWidth = Math.max(1920, this.width || 1920);
     const exportHeight = Math.max(1080, Math.round((exportWidth * (this.height || 1080)) / (this.width || 1920)));
 
-    // Step 1: Create isolated high-resolution ink canvas (alpha: true)
     const inkExportCanvas = document.createElement('canvas');
     inkExportCanvas.width = exportWidth;
     inkExportCanvas.height = exportHeight;
     const inkExpCtx = inkExportCanvas.getContext('2d', { alpha: true });
     if (!inkExpCtx) return '';
 
-    // Render all strokes onto isolated ink layer
     const strokes = this.history.getStrokes();
     const scaleFactor = exportWidth / (this.width || exportWidth);
 
@@ -491,14 +414,12 @@ export class DrawingEngine {
       this.renderStroke(inkExpCtx, scaledStroke, exportWidth, exportHeight);
     }
 
-    // Step 2: Create final export canvas
     const finalExportCanvas = document.createElement('canvas');
     finalExportCanvas.width = exportWidth;
     finalExportCanvas.height = exportHeight;
     const finalCtx = finalExportCanvas.getContext('2d', { alpha: !backgroundWhite || transparentBackground });
     if (!finalCtx) return '';
 
-    // Step 3: Draw background (if not transparent)
     if (!transparentBackground) {
       if (includeGrid) {
         if (this.gridStyle === 'blueprint') {
@@ -513,16 +434,12 @@ export class DrawingEngine {
         }
         this.drawBackgroundGrid(finalCtx, exportWidth, exportHeight, this.gridStyle);
       } else {
-        // Pristine solid white canvas background
         finalCtx.fillStyle = '#ffffff';
         finalCtx.fillRect(0, 0, exportWidth, exportHeight);
       }
     }
 
-    // Step 4: Composite clean ink on top with source-over
-    // Because the erased parts on inkExportCanvas have alpha 0, they do not affect the background at all!
     finalCtx.drawImage(inkExportCanvas, 0, 0);
-
     return finalExportCanvas.toDataURL('image/png');
   }
 

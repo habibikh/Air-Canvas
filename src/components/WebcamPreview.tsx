@@ -194,49 +194,51 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = React.memo(({
 
       ctx.save();
 
-      // 1. Draw skeleton connections
+      // 1. Draw skeleton connections in single batched path
       ctx.strokeStyle = skeletonOnlyMode ? 'rgba(34, 211, 238, 0.85)' : 'rgba(6, 182, 212, 0.65)';
       ctx.lineWidth = skeletonOnlyMode ? 2.5 : 2;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
+      ctx.beginPath();
       for (const [startIdx, endIdx] of HAND_CONNECTIONS) {
         const p1 = landmarks[startIdx];
         const p2 = landmarks[endIdx];
         if (p1 && p2) {
-          ctx.beginPath();
           ctx.moveTo(p1.x * w, p1.y * h);
           ctx.lineTo(p2.x * w, p2.y * h);
-          ctx.stroke();
         }
       }
+      ctx.stroke();
 
-      // 2. Draw joint landmarks
+      // 2. Draw regular joint landmarks in single batched fill
+      ctx.beginPath();
       for (let i = 0; i < landmarks.length; i++) {
+        if (i === 8) continue; // Index tip is styled separately
         const pt = landmarks[i];
-        const isTip = [4, 8, 12, 16, 20].includes(i);
-        const isIndexTip = i === 8;
+        const radius = [4, 12, 16, 20].includes(i) ? 3.5 : 2.5;
+        ctx.moveTo(pt.x * w + radius, pt.y * h);
+        ctx.arc(pt.x * w, pt.y * h, radius, 0, Math.PI * 2);
+      }
+      ctx.fillStyle = '#38bdf8';
+      ctx.fill();
+
+      // 3. Highlight index tip
+      const tip = landmarks[8];
+      if (tip) {
+        ctx.beginPath();
+        ctx.arc(tip.x * w, tip.y * h, 5.5, 0, Math.PI * 2);
+        ctx.fillStyle = result.gesture === 'draw' ? '#4f46e5' : '#06b6d4';
+        ctx.fill();
 
         ctx.beginPath();
-        const radius = isIndexTip ? 5.5 : isTip ? 4 : 2.75;
-        ctx.arc(pt.x * w, pt.y * h, radius, 0, Math.PI * 2);
-
-        if (isIndexTip) {
-          ctx.fillStyle = result.gesture === 'draw' ? '#4f46e5' : '#06b6d4';
-          ctx.fill();
-          // Concentric highlight ring
-          ctx.beginPath();
-          ctx.arc(pt.x * w, pt.y * h, 8, 0, Math.PI * 2);
-          ctx.strokeStyle = result.gesture === 'draw' ? 'rgba(99, 102, 241, 0.8)' : 'rgba(34, 211, 238, 0.8)';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        } else {
-          ctx.fillStyle = skeletonOnlyMode ? '#38bdf8' : '#38bdf8';
-          ctx.fill();
-        }
+        ctx.arc(tip.x * w, tip.y * h, 8.5, 0, Math.PI * 2);
+        ctx.strokeStyle = result.gesture === 'draw' ? 'rgba(99, 102, 241, 0.9)' : 'rgba(34, 211, 238, 0.85)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
       }
 
-      // 3. Highlight palm center if in erase mode
+      // 4. Highlight palm center if in erase mode
       if (result.gesture === 'erase' && result.palmCenter) {
         const pc = result.palmCenter;
         ctx.beginPath();
@@ -319,16 +321,18 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = React.memo(({
               ref={videoRef}
               playsInline
               muted
-              className={`w-full h-full object-cover scale-x-[-1] transition-opacity duration-300 pointer-events-none ${
+              className={`w-full h-full object-cover scale-x-[-1] pointer-events-none ${
                 cameraStatus === 'active' && !skeletonOnlyMode ? 'opacity-90' : 'opacity-0'
               }`}
+              style={{ transform: 'scaleX(-1) translateZ(0)' }}
             />
             {/* Real-time skeleton canvas */}
             <canvas
               ref={canvasRef}
               width={120}
               height={120}
-              className="absolute inset-0 w-full h-full pointer-events-none scale-x-[-1]"
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              style={{ transform: 'scaleX(-1) translateZ(0)' }}
             />
             {cameraStatus !== 'active' && (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-white pointer-events-none">
@@ -372,7 +376,7 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = React.memo(({
         touchAction: 'none',
       }}
     >
-      <div className="glass-panel overflow-hidden rounded-2xl shadow-xl w-56 sm:w-72 border border-slate-200/80 bg-white/90 backdrop-blur-md">
+      <div className="glass-panel overflow-hidden rounded-2xl shadow-xl w-56 sm:w-72 border border-slate-200/80 bg-white/95">
         {/* HUD Top Bar - Movable Draggable Header */}
         <div
           onPointerDown={handlePointerDown}
@@ -413,7 +417,7 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = React.memo(({
 
               {/* Corner Snap Menu Popover */}
               {showDockMenu && (
-                <div className="absolute top-full right-0 mt-1.5 w-44 bg-white/95 backdrop-blur-lg rounded-xl shadow-xl border border-slate-200 p-2 z-50 animate-fade-in text-xs">
+                <div className="absolute top-full right-0 mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50 animate-fade-in text-xs">
                   <div className="font-semibold text-slate-700 text-[10px] uppercase tracking-wider mb-1.5 flex items-center justify-between">
                     <span>Move / Snap</span>
                     <span className="text-[9px] text-slate-400">Drag or click</span>
@@ -520,9 +524,10 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = React.memo(({
               ref={videoRef}
               playsInline
               muted
-              className={`w-full h-full object-cover scale-x-[-1] transition-opacity duration-300 pointer-events-none ${
-                cameraStatus === 'active' && !skeletonOnlyMode ? 'opacity-85' : 'opacity-0'
+              className={`w-full h-full object-cover pointer-events-none ${
+                cameraStatus === 'active' && !skeletonOnlyMode ? 'opacity-90' : 'opacity-0'
               }`}
+              style={{ transform: 'scaleX(-1) translateZ(0)' }}
             />
 
             {/* Hand landmark overlay canvas */}
@@ -530,7 +535,8 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = React.memo(({
               ref={canvasRef}
               width={320}
               height={240}
-              className="absolute inset-0 w-full h-full pointer-events-none scale-x-[-1]"
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              style={{ transform: 'scaleX(-1) translateZ(0)' }}
             />
 
             {/* Inactive, Denied, or Requesting camera state display */}
@@ -597,11 +603,11 @@ export const WebcamPreview: React.FC<WebcamPreviewProps> = React.memo(({
             {/* Live Gesture Tag */}
             {cameraStatus === 'active' && (
               <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold border border-zinc-200/60 uppercase tracking-wider backdrop-blur-md bg-white/95 text-zinc-800 shadow-xs">
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold border border-zinc-200/80 uppercase tracking-wider bg-white/95 text-zinc-800 shadow-xs">
                   {currentGesture === 'draw' && '✍️ Writing'}
                   {currentGesture === 'erase' && '✋ Eraser'}
                   {currentGesture === 'cursor' && '✌️ Pointer'}
-                  {currentGesture === 'pause' && '✊ Paused'}
+                  {currentGesture === 'pause' && '✊ Hold'}
                   {currentGesture === 'none' && (isHandDetected ? 'Ready' : 'No Hand')}
                 </span>
                 {skeletonOnlyMode && (

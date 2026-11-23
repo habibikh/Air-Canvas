@@ -2,7 +2,12 @@
  * AirCanvas type definitions
  */
 
-export type GestureType = 'draw' | 'erase' | 'pause' | 'cursor' | 'none';
+export type GestureType =
+  | 'draw'    // Index finger extended (Write)
+  | 'erase'   // Open palm (Erase)
+  | 'cursor'  // Two fingers extended (Pointer)
+  | 'pause'   // Closed fist (Hold)
+  | 'none';
 
 export interface LandmarkPoint {
   x: number;
@@ -25,12 +30,11 @@ export interface HandDetectionResult {
   dominantHand: 'Left' | 'Right' | 'Unknown';
 }
 
-export type StrokeTool = 'pen' | 'highlighter' | 'eraser' | 'line' | 'rectangle' | 'circle';
+export type StrokeTool = 'pen' | 'eraser';
 
 export interface StrokePoint {
   x: number; // normalized [0, 1]
   y: number; // normalized [0, 1]
-  pressure?: number;
   timestamp: number;
 }
 
@@ -38,9 +42,8 @@ export interface Stroke {
   id: string;
   tool: StrokeTool;
   color: string;
-  size: number; // size in normalized or base pixels
+  size: number;
   points: StrokePoint[];
-  opacity?: number;
 }
 
 export type GridStyle = 'dots' | 'grid' | 'blank' | 'blueprint' | 'ruled';
@@ -58,9 +61,8 @@ export interface CanvasSettings {
   mirrorTracking: boolean;
   autoConnectCamera: boolean;
   showGestureCoach: boolean;
-  showCursorTrail: boolean;
   targetFps: 30 | 35 | 45 | 50;
-  skeletonOnlyMode: boolean; // Hide camera video, trace hand only in blank/clean area
+  skeletonOnlyMode: boolean; // Hide camera video, trace hand only in clean area
 }
 
 export type CameraStatus = 'idle' | 'requesting' | 'active' | 'denied' | 'error' | 'unsupported';
@@ -70,14 +72,4 @@ export interface ToastMessage {
   title: string;
   description?: string;
   type?: 'info' | 'success' | 'warning';
-}
-
-export interface StickyNote {
-  id: string;
-  x: number; // normalized [0, 1]
-  y: number; // normalized [0, 1]
-  width: number;
-  height: number;
-  color: string;
-  text: string;
 }

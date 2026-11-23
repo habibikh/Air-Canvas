@@ -50,36 +50,36 @@ export const GestureCoach: React.FC<GestureCoachProps> = ({
       case 'draw':
         return {
           icon: '☝️',
-          title: 'Writing Active',
-          subtitle: 'Move your index finger to sketch in thin air. Curl fingers to pause.',
+          title: 'Write Active',
+          subtitle: 'Move your index finger to write in thin air. Make a fist to hold.',
           accent: 'border-indigo-300 bg-indigo-50/95 text-indigo-900',
         };
       case 'erase':
         return {
           icon: '✋',
-          title: 'Palm Eraser Active',
-          subtitle: 'Move your open hand over strokes to progressively erase them.',
+          title: 'Erase Active',
+          subtitle: 'Move your open palm over strokes to erase them cleanly.',
           accent: 'border-rose-300 bg-rose-50/95 text-rose-900',
         };
       case 'cursor':
         return {
           icon: '✌️',
           title: 'Pointer Mode',
-          subtitle: 'Two fingers raised: move the reticle without leaving marks.',
+          subtitle: 'Two fingers raised: move the pointer freely without writing.',
           accent: 'border-cyan-300 bg-cyan-50/95 text-cyan-900',
         };
       case 'pause':
         return {
           icon: '✊',
-          title: 'Paused (Fist)',
-          subtitle: 'All fingers curled: drawing and erasing safely paused.',
+          title: 'Hold (Fist)',
+          subtitle: 'Closed fist: writing and erasing safely on hold.',
           accent: 'border-amber-300 bg-amber-50/95 text-amber-900',
         };
       default:
         return {
           icon: '✨',
           title: 'Hand Tracked',
-          subtitle: 'Raise index finger to write, open palm to erase, or fist to pause.',
+          subtitle: '1 finger to write, open palm to erase, 2 fingers for pointer, fist to hold.',
           accent: 'border-slate-200 bg-white/95 text-slate-800',
         };
     }

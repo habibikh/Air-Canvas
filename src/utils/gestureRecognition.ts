@@ -1,24 +1,84 @@
 /**
  * High-Precision Hand Gesture Recognition Engine for AirCanvas
- * Robust 3D scale-invariant analysis for rock-solid detection across angles & tilts
+ * Supports the 4 core spatial gestures:
+ * 1. Write (draw): Index finger extended
+ * 2. Erase (erase): Open palm
+ * 3. Pointer (cursor): Index + middle fingers extended
+ * 4. Hold (pause): Closed fist
  */
 
-import { GestureType, HandDetectionResult, LandmarkPoint } from '../types';
-import { euclideanDistance } from './coordinateMapping';
+import { GestureType, LandmarkPoint } from '../types';
 
 export interface GestureThresholds {
   fingerExtensionRatio: number; // Ratio between tip-wrist distance and pip-wrist distance
   fingerMcpRatio: number;       // Ratio between tip-mcp distance and pip-mcp distance
   debounceFrames: number;       // Frames required to confirm gesture transition
-  graceFrames: number;          // Frames to hold active draw stroke through momentary tracking noise
+  graceFrames: number;          // Frames to hold active stroke through momentary tracking noise
 }
 
 export const DEFAULT_THRESHOLDS: GestureThresholds = {
-  fingerExtensionRatio: 1.08,
-  fingerMcpRatio: 1.15,
-  debounceFrames: 2,
-  graceFrames: 2,
+  fingerExtensionRatio: 1.05,
+  fingerMcpRatio: 1.10,
+  debounceFrames: 3,
+  graceFrames: 3,
 };
+
+/**
+ * Computes 3D distance with damped Z-axis weight so noisy monocular webcam depth
+ * does not cause finger extension/folding flicker.
+ */
+function fingerDistance(p1: LandmarkPoint, p2: LandmarkPoint): number {
+  const dx = p1.x - p2.x;
+  const dy = p1.y - p2.y;
+  const dz = ((p1.z || 0) - (p2.z || 0)) * 0.45;
+  return Math.hypot(dx, dy, dz);
+}
+
+/**
+ * Adaptive temporal smoother for all 21 MediaPipe hand landmarks.
+ * Eliminates micro-tremor when steady and follows fast motion immediately.
+ */
+export class LandmarkSmoother {
+  private prev: LandmarkPoint[] | null = null;
+
+  public smooth(rawLandmarks: LandmarkPoint[]): LandmarkPoint[] {
+    if (!rawLandmarks || rawLandmarks.length === 0) {
+      return rawLandmarks;
+    }
+
+    if (!this.prev || this.prev.length !== rawLandmarks.length) {
+      this.prev = rawLandmarks.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z || 0 }));
+      return this.prev;
+    }
+
+    const smoothed: LandmarkPoint[] = new Array(rawLandmarks.length);
+    for (let i = 0; i < rawLandmarks.length; i++) {
+      const curr = rawLandmarks[i];
+      const p = this.prev[i];
+      const dx = curr.x - p.x;
+      const dy = curr.y - p.y;
+      const move = Math.hypot(dx, dy);
+
+      // Deadband tiny sub-pixel sensor shimmer, accelerate smoothly during real motion
+      const alphaXY = move < 0.002 ? 0.32 : Math.min(0.92, 0.48 + move * 14.0);
+      const alphaZ = 0.30; // Stronger damping on noisy depth estimate
+
+      const nx = p.x + dx * alphaXY;
+      const ny = p.y + dy * alphaXY;
+      const nz = (p.z || 0) + ((curr.z || 0) - (p.z || 0)) * alphaZ;
+
+      const pt = { x: nx, y: ny, z: nz };
+      this.prev[i] = pt;
+      smoothed[i] = pt;
+    }
+
+    return smoothed;
+  }
+
+  public reset() {
+    this.prev = null;
+  }
+}
 
 export interface FingerAnalysis {
   index: boolean;
@@ -31,6 +91,7 @@ export interface FingerAnalysis {
   ringFolded: boolean;
   pinkyFolded: boolean;
   handScale: number;
+  extendedCount: number;
 }
 
 /**
@@ -40,7 +101,7 @@ export function calculateHandScale(landmarks: LandmarkPoint[]): number {
   if (!landmarks || landmarks.length < 21) return 0.2;
   const wrist = landmarks[0];
   const middleMcp = landmarks[9];
-  const scale = euclideanDistance(wrist, middleMcp);
+  const scale = fingerDistance(wrist, middleMcp);
   return Math.max(0.05, Math.min(0.8, scale));
 }
 
@@ -56,24 +117,33 @@ export function isFingerExtended(
   thresholds: GestureThresholds = DEFAULT_THRESHOLDS,
   handScale: number = 0.2
 ): boolean {
-  const distTipWrist = euclideanDistance(tip, wrist);
-  const distPipWrist = euclideanDistance(pip, wrist);
+  const distTipWrist = fingerDistance(tip, wrist);
+  const distPipWrist = fingerDistance(pip, wrist);
 
-  const distTipMcp = euclideanDistance(tip, mcp);
-  const distPipMcp = euclideanDistance(pip, mcp);
-  const distDipMcp = euclideanDistance(dip, mcp);
+  const distTipMcp = fingerDistance(tip, mcp);
+  const distPipMcp = fingerDistance(pip, mcp);
+  const distDipMcp = fingerDistance(dip, mcp);
 
-  // 1. Tip is farther from wrist than PIP
+  const v1x = pip.x - mcp.x;
+  const v1y = pip.y - mcp.y;
+  const v1z = ((pip.z || 0) - (mcp.z || 0)) * 0.45;
+  const len1 = Math.hypot(v1x, v1y, v1z);
+
+  const v2x = tip.x - pip.x;
+  const v2y = tip.y - pip.y;
+  const v2z = ((tip.z || 0) - (pip.z || 0)) * 0.45;
+  const len2 = Math.hypot(v2x, v2y, v2z);
+
+  const isStraight = len1 > 0 && len2 > 0 && ((v1x * v2x + v1y * v2y + v1z * v2z) / (len1 * len2) > 0.42);
+
   const wristExtended = distTipWrist > distPipWrist * thresholds.fingerExtensionRatio;
-
-  // 2. Tip is farther from MCP than PIP is from MCP
   const mcpExtended = distTipMcp > distPipMcp * thresholds.fingerMcpRatio;
+  const scaleExtended = distTipMcp > handScale * 0.58;
+  const uncurled = distTipMcp >= distDipMcp * 0.92;
 
-  // 3. Scale-normalized check: extended finger tip is typically > 0.65 * handScale from MCP
-  const scaleExtended = distTipMcp > handScale * 0.62;
-
-  // 4. Uncurled check: tip is farther or equal from MCP compared to DIP
-  const uncurled = distTipMcp >= distDipMcp * 0.95;
+  if (isStraight && (distTipMcp > distPipMcp * 1.05 || scaleExtended)) {
+    return true;
+  }
 
   return (wristExtended && mcpExtended) || (wristExtended && scaleExtended && uncurled);
 }
@@ -88,12 +158,11 @@ export function isFingerFolded(
   wrist: LandmarkPoint,
   handScale: number = 0.2
 ): boolean {
-  const distTipMcp = euclideanDistance(tip, mcp);
-  const distTipWrist = euclideanDistance(tip, wrist);
-  const distPipWrist = euclideanDistance(pip, wrist);
-  const distPipMcp = euclideanDistance(pip, mcp);
+  const distTipMcp = fingerDistance(tip, mcp);
+  const distTipWrist = fingerDistance(tip, wrist);
+  const distPipWrist = fingerDistance(pip, wrist);
+  const distPipMcp = fingerDistance(pip, mcp);
 
-  // Folded finger has tip close to palm/MCP or tucked inside PIP relative to wrist
   const tipNearPalm = distTipMcp < handScale * 0.55;
   const tipTucked = distTipWrist < distPipWrist * 1.05;
   const curledUnder = distTipMcp < distPipMcp * 1.05;
@@ -112,10 +181,10 @@ export function isThumbExtended(
   pinkyMcp: LandmarkPoint,
   handScale: number = 0.2
 ): boolean {
-  const distTipPinky = euclideanDistance(tip, pinkyMcp);
-  const distIpPinky = euclideanDistance(ip, pinkyMcp);
-  const distTipWrist = euclideanDistance(tip, wrist);
-  const distMcpWrist = euclideanDistance(mcp, wrist);
+  const distTipPinky = fingerDistance(tip, pinkyMcp);
+  const distIpPinky = fingerDistance(ip, pinkyMcp);
+  const distTipWrist = fingerDistance(tip, wrist);
+  const distMcpWrist = fingerDistance(mcp, wrist);
 
   const awayFromPalm = distTipPinky > distIpPinky * 1.04;
   const awayFromWrist = distTipWrist > distMcpWrist * 1.04;
@@ -151,6 +220,8 @@ export function analyzeFingers(
   const ringFolded = isFingerFolded(landmarks[16], landmarks[14], landmarks[13], wrist, handScale);
   const pinkyFolded = isFingerFolded(landmarks[20], landmarks[18], landmarks[17], wrist, handScale);
 
+  const extendedCount = (index ? 1 : 0) + (middle ? 1 : 0) + (ring ? 1 : 0) + (pinky ? 1 : 0);
+
   return {
     index,
     middle,
@@ -162,49 +233,57 @@ export function analyzeFingers(
     ringFolded,
     pinkyFolded,
     handScale,
+    extendedCount,
   };
 }
 
 /**
- * Classifies raw gesture from finger analysis with human ergonomics tolerances
+ * Classifies raw gesture from finger analysis:
+ * - Open palm (4+ fingers extended): erase (Erase)
+ * - 2 Fingers (Index + Middle extended): cursor (Pointer)
+ * - Closed Fist (0 fingers extended / all folded): pause (Hold)
+ * - 1 Finger (Index extended): draw (Write)
  */
-export function classifyGesture(fingers: FingerAnalysis): GestureType {
-  const { index, middle, ring, pinky, middleFolded, ringFolded, pinkyFolded } = fingers;
+export function classifyGesture(fingers: Partial<FingerAnalysis>): GestureType {
+  const {
+    index = false,
+    middle = false,
+    ring = false,
+    pinky = false,
+    middleFolded = false,
+    ringFolded = false,
+    pinkyFolded = false,
+  } = fingers;
 
-  // Count total extended fingers (excluding thumb)
-  const extendedCount = (index ? 1 : 0) + (middle ? 1 : 0) + (ring ? 1 : 0) + (pinky ? 1 : 0);
+  const extendedCount = fingers.extendedCount !== undefined
+    ? fingers.extendedCount
+    : (index ? 1 : 0) + (middle ? 1 : 0) + (ring ? 1 : 0) + (pinky ? 1 : 0);
 
-  // Gesture B: Open Palm Eraser
-  // 4 fingers extended, or 3 fingers extended including index & middle with fingers spread
-  if (extendedCount >= 4 || (extendedCount === 3 && index && middle && !ringFolded && !pinkyFolded)) {
+  // 1. Open Palm -> Erase
+  if (extendedCount >= 4 || (extendedCount === 3 && index && middle && !ringFolded && !pinkyFolded && pinky)) {
     return 'erase';
   }
 
-  // Gesture C: Fist / Pause
-  // All four fingers folded or 0 extended
-  if (extendedCount === 0 || (!index && middleFolded && ringFolded && pinkyFolded)) {
-    return 'pause';
-  }
-
-  // Gesture D: Two-Finger Cursor Mode
-  // Index and middle extended, ring and pinky folded
+  // 2. Two Fingers (Index + Middle) -> Pointer
   if (index && middle && !ring && !pinky) {
     return 'cursor';
   }
 
-  // Gesture A: Writing / Drawing
-  // Standard: Index extended, middle, ring, pinky folded
+  // 3. Closed Fist -> Hold / Pause
+  if (extendedCount === 0 || (!index && middleFolded && ringFolded && pinkyFolded)) {
+    return 'pause';
+  }
+
+  // 4. Index Finger Extended -> Write
   if (index && !middle && !ring && !pinky) {
     return 'draw';
   }
 
-  // Ergonomic tolerance for natural drawing grip:
-  // When users point index, middle and ring are curled, but pinky may be slightly relaxed
+  // Ergonomic tolerance for natural pointing grip
   if (index && middleFolded && ringFolded && !middle) {
     return 'draw';
   }
 
-  // Fallback for transition/unrecognized hand postures
   return 'none';
 }
 
@@ -243,7 +322,6 @@ export class GestureStabilizer {
   }
 
   public process(rawGesture: GestureType): GestureType {
-    // 1. Same gesture: refresh candidate and maintain
     if (rawGesture === this.currentGesture) {
       this.candidateGesture = rawGesture;
       this.candidateCount = 0;
@@ -251,34 +329,26 @@ export class GestureStabilizer {
       return this.currentGesture;
     }
 
-    // 2. Active stroke grace period:
-    // If we are currently in 'draw' or 'erase' mode and get a momentary 'none' or dropped frame,
-    // hold the active gesture for graceFrames so drawing lines do not stutter or break!
-    if ((this.currentGesture === 'draw' || this.currentGesture === 'erase') && rawGesture === 'none') {
+    const isActivelyDrawing = this.currentGesture === 'draw' || this.currentGesture === 'erase';
+
+    // Hold active Write/Erase stroke steady across momentary detection dropouts
+    if (isActivelyDrawing && rawGesture === 'none') {
       if (this.graceFramesRemaining > 0) {
         this.graceFramesRemaining--;
         return this.currentGesture;
       }
-      // Grace period exhausted: release cleanly to 'none'
       this.currentGesture = 'none';
       this.candidateGesture = 'none';
       this.candidateCount = 0;
       return 'none';
     }
 
-    // 3. Fast-path transition into 'pause'
-    if (rawGesture === 'pause') {
-      this.currentGesture = 'pause';
-      this.candidateGesture = 'pause';
-      this.candidateCount = 0;
-      this.graceFramesRemaining = 0;
-      return 'pause';
-    }
-
-    // 4. Multi-frame debounce for other transitions
+    // Multi-frame debounce with asymmetric stroke exit protection
     if (rawGesture === this.candidateGesture) {
       this.candidateCount++;
-      const requiredFrames = this.thresholds.debounceFrames;
+      const requiredFrames = isActivelyDrawing
+        ? Math.max(3, this.thresholds.debounceFrames + 1)
+        : this.thresholds.debounceFrames;
 
       if (this.candidateCount >= requiredFrames) {
         this.currentGesture = rawGesture;

@@ -9,25 +9,16 @@ import {
   Trash2,
   Undo2,
   Hand,
-  Eye,
-  EyeOff,
   Compass,
 } from 'lucide-react';
-import { CameraStatus, GestureType } from '../types';
 import { AirCanvasLogo } from './AirCanvasLogo';
 
 interface HeaderProps {
-  cameraStatus: CameraStatus;
-  currentGesture: GestureType;
-  fps: number;
-  confidence: number;
-  isHandDetected: boolean;
   canUndo: boolean;
   canRedo: boolean;
   isFullscreen: boolean;
   showGestureCoach: boolean;
   skeletonOnlyMode: boolean;
-  onToggleCamera: () => void;
   onToggleCoach: () => void;
   onToggleSkeletonOnly: () => void;
   onUndo: () => void;
@@ -37,11 +28,9 @@ interface HeaderProps {
   onToggleFullscreen: () => void;
   onOpenGuide: () => void;
   onOpenSettings: () => void;
-  onOpenLogoPreview?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = React.memo(({
-  cameraStatus,
   canUndo,
   canRedo,
   isFullscreen,
@@ -56,36 +45,28 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   onToggleFullscreen,
   onOpenGuide,
   onOpenSettings,
-  onOpenLogoPreview,
 }) => {
   return (
     <header className="absolute top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 z-30 pointer-events-none flex items-center justify-between gap-3">
       {/* Brand & Hand Only Control */}
       <div className="pointer-events-auto flex items-center gap-2.5 sm:gap-3 bg-white/90 backdrop-blur-md px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl shadow-sm border border-zinc-200/80 shrink-0">
-        <button
-          onClick={onOpenLogoPreview}
-          className="group flex items-center gap-2.5 text-left rounded-xl p-0.5 hover:opacity-90 transition-opacity cursor-pointer focus:outline-none"
-          title="AirCanvas Spatial Whiteboard"
-          aria-label="AirCanvas brand"
-        >
+        <div className="flex items-center gap-2.5 select-none">
           <div className="relative shrink-0">
             <AirCanvasLogo size={32} showGlow={false} animated={false} />
           </div>
           <div className="flex flex-col">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm sm:text-base font-bold tracking-tight text-zinc-900 group-hover:text-indigo-600 transition-colors">
-                AirCanvas
-              </span>
-            </div>
+            <span className="text-sm sm:text-base font-bold tracking-tight text-zinc-900">
+              AirCanvas
+            </span>
             <span className="text-[10px] text-zinc-500 font-medium hidden md:block leading-none">
               Your ideas, in thin air
             </span>
           </div>
-        </button>
+        </div>
 
         <div className="h-5 w-[1px] bg-zinc-200 shrink-0"></div>
 
-        {/* Hand Only Button: Prominent, tactile studio toggle */}
+        {/* Hand Only Button */}
         <button
           onClick={onToggleSkeletonOnly}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shadow-xs ${
@@ -117,7 +98,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
 
       {/* Workspace Actions */}
       <div className="pointer-events-auto flex items-center gap-1 sm:gap-1.5 bg-white/90 backdrop-blur-md p-1.5 rounded-2xl shadow-sm border border-zinc-200/80 shrink-0">
-        {/* Gesture Coach Assistant Toggle */}
+        {/* Gesture Coach Toggle */}
         <button
           onClick={onToggleCoach}
           className={`p-2 rounded-xl text-xs font-medium transition-colors ${
@@ -125,7 +106,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
               ? 'bg-zinc-100 text-zinc-900'
               : 'text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100/70'
           }`}
-          title={showGestureCoach ? 'Hide Gesture Coach guidance' : 'Show Gesture Coach guidance'}
+          title={showGestureCoach ? 'Hide Gesture Coach' : 'Show Gesture Coach'}
           aria-label="Toggle Gesture Coach"
         >
           <Compass className="w-4 h-4" />
@@ -182,7 +163,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({
         <button
           onClick={onOpenGuide}
           className="p-2 rounded-xl text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
-          title="Gestures Guide (1-finger Draw, Palm Erase)"
+          title="Gestures Guide (Write, Erase, Pointer, Hold)"
           aria-label="Gesture Guide"
         >
           <HelpCircle className="w-4 h-4" />

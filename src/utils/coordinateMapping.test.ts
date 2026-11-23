@@ -49,3 +49,16 @@ test('getMidpoint finds exact midpoint', () => {
   const mid = getMidpoint({ x: 10, y: 20 }, { x: 30, y: 40 });
   assert.deepEqual(mid, { x: 20, y: 30 });
 });
+
+test('PointFilter One Euro Filter suppresses micro-tremor when steady and responds quickly to fast motion', () => {
+  const filter = new PointFilter('medium');
+  filter.filter(0.5, 0.5, 0);
+
+  // Small jitter (+0.005) over 33ms should be strongly damped
+  const steady = filter.filter(0.505, 0.505, 33);
+  assert.ok(Math.abs(steady.x - 0.5) < 0.0025, `Expected damped jitter, got ${steady.x}`);
+
+  // Fast sweep (+0.25) over 33ms should track responsively with high cutoff
+  const fast = filter.filter(0.75, 0.75, 66);
+  assert.ok(fast.x > 0.60, `Expected responsive fast tracking, got ${fast.x}`);
+});

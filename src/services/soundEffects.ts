@@ -141,6 +141,134 @@ class SoundEffectsService {
       // Ignore
     }
   }
+
+  /**
+   * Futuristic holographic halo menu opening chime
+   */
+  public playHaloOpen() {
+    if (!this.enabled) return;
+    try {
+      this.initContext();
+      if (!this.audioCtx) return;
+
+      const now = this.audioCtx.currentTime;
+      const osc1 = this.audioCtx.createOscillator();
+      const osc2 = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(392, now); // G4
+      osc1.frequency.exponentialRampToValueAtTime(1046.5, now + 0.18); // C6
+
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(523.25, now); // C5
+      osc2.frequency.exponentialRampToValueAtTime(1318.5, now + 0.18); // E6
+
+      gain.gain.setValueAtTime(0.06, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(this.audioCtx.destination);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 0.22);
+      osc2.stop(now + 0.22);
+    } catch {
+      // Ignore
+    }
+  }
+
+  /**
+   * Crisp harmonic tool selection confirmation
+   */
+  public playSelect() {
+    if (!this.enabled) return;
+    try {
+      this.initContext();
+      if (!this.audioCtx) return;
+
+      const now = this.audioCtx.currentTime;
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now); // A5
+      osc.frequency.exponentialRampToValueAtTime(1318.5, now + 0.08); // E6
+
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.09);
+    } catch {
+      // Ignore
+    }
+  }
+
+  /**
+   * Camera snapshot shutter sound
+   */
+  public playSnapshot() {
+    if (!this.enabled) return;
+    try {
+      this.initContext();
+      if (!this.audioCtx) return;
+
+      const now = this.audioCtx.currentTime;
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1200, now);
+      osc.frequency.setValueAtTime(600, now + 0.03);
+
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.12);
+    } catch {
+      // Ignore
+    }
+  }
+
+  /**
+   * Twinkling star particle chime for neon/rainbow strokes
+   */
+  public playSparkle() {
+    if (!this.enabled) return;
+    try {
+      this.initContext();
+      if (!this.audioCtx) return;
+
+      const now = this.audioCtx.currentTime;
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1567.98, now); // G6
+      osc.frequency.exponentialRampToValueAtTime(2093, now + 0.06); // C7
+
+      gain.gain.setValueAtTime(0.03, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.06);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export const soundEffects = new SoundEffectsService();
