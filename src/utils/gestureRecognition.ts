@@ -59,9 +59,9 @@ export class LandmarkSmoother {
       const dy = curr.y - p.y;
       const move = Math.hypot(dx, dy);
 
-      // Deadband tiny sub-pixel sensor shimmer, accelerate smoothly during real motion
-      const alphaXY = move < 0.002 ? 0.32 : Math.min(0.92, 0.48 + move * 14.0);
-      const alphaZ = 0.30; // Stronger damping on noisy depth estimate
+      // Deadband tiny stationary sensor shimmer, track writing motion with near-zero lag
+      const alphaXY = move < 0.0025 ? 0.35 : Math.min(0.96, 0.72 + move * 12.0);
+      const alphaZ = 0.32; // Stronger damping on noisy depth estimate
 
       const nx = p.x + dx * alphaXY;
       const ny = p.y + dy * alphaXY;
@@ -343,11 +343,14 @@ export class GestureStabilizer {
       return 'none';
     }
 
-    // Multi-frame debounce with asymmetric stroke exit protection
+    // Multi-frame debounce with fast Write/Erase entry and asymmetric stroke exit protection
     if (rawGesture === this.candidateGesture) {
       this.candidateCount++;
+      const isEnteringDrawOrErase = !isActivelyDrawing && (rawGesture === 'draw' || rawGesture === 'erase');
       const requiredFrames = isActivelyDrawing
         ? Math.max(3, this.thresholds.debounceFrames + 1)
+        : isEnteringDrawOrErase
+        ? Math.min(2, this.thresholds.debounceFrames)
         : this.thresholds.debounceFrames;
 
       if (this.candidateCount >= requiredFrames) {

@@ -197,7 +197,7 @@ export const Whiteboard: React.FC<WhiteboardProps> = memo(({
       }
     };
 
-    const MIN_POINT_STEP_NORM = 0.0018;
+    const MIN_POINT_STEP_NORM = 0.0010;
 
     const unsubscribe = registerFrameListener((result) => {
       const engine = engineRef.current;
@@ -214,13 +214,12 @@ export const Whiteboard: React.FC<WhiteboardProps> = memo(({
         }
 
         if (isGestureDrawingRef.current || isGestureErasingRef.current) {
-          strokeHistory.endStroke();
+          const finished = strokeHistory.endStroke();
           isGestureDrawingRef.current = false;
           isGestureErasingRef.current = false;
           lastStrokeNormPointRef.current = null;
           soundEffects.playDrawEnd();
-          engine.invalidateCache();
-          engine.requestRender();
+          engine.commitStroke(finished);
           onStrokeChange();
         }
 
@@ -260,15 +259,23 @@ export const Whiteboard: React.FC<WhiteboardProps> = memo(({
       targetCursorRef.current.y = canvasY;
       targetCursorRef.current.visible = true;
 
+      const isActivelyInking = gesture === 'draw' || gesture === 'erase';
+
       if (cursorWrapperRef.current) {
-        if (!visualCursorRef.current.initialized) {
+        if (!visualCursorRef.current.initialized || isActivelyInking) {
+          // Lock pen/eraser cursor directly to the live ink tip so ink never trails behind cursor
           visualCursorRef.current.x = canvasX;
           visualCursorRef.current.y = canvasY;
           visualCursorRef.current.initialized = true;
           cursorWrapperRef.current.style.transform = `translate3d(${canvasX.toFixed(1)}px, ${canvasY.toFixed(1)}px, 0)`;
+          if (isActivelyInking) {
+            stopCursorAnimation();
+          }
         }
         cursorWrapperRef.current.style.opacity = '1';
-        startCursorAnimation();
+        if (!isActivelyInking) {
+          startCursorAnimation();
+        }
       }
 
       if (gesture !== lastGestureRef.current) {
@@ -277,10 +284,10 @@ export const Whiteboard: React.FC<WhiteboardProps> = memo(({
 
       if (gesture === 'draw') {
         if (isGestureErasingRef.current) {
-          strokeHistory.endStroke();
+          const finished = strokeHistory.endStroke();
           isGestureErasingRef.current = false;
           lastStrokeNormPointRef.current = null;
-          engine.invalidateCache();
+          engine.commitStroke(finished);
         }
 
         if (!isGestureDrawingRef.current) {
@@ -288,23 +295,23 @@ export const Whiteboard: React.FC<WhiteboardProps> = memo(({
           lastStrokeNormPointRef.current = { x: smoothed.x, y: smoothed.y };
           strokeHistory.startStroke('pen', color, size, { x: smoothed.x, y: smoothed.y });
           soundEffects.playDrawStart();
-          engine.requestRender();
+          engine.render();
         } else {
           const prev = lastStrokeNormPointRef.current;
           const dist = prev ? Math.hypot(smoothed.x - prev.x, smoothed.y - prev.y) : Infinity;
           if (dist >= MIN_POINT_STEP_NORM) {
             lastStrokeNormPointRef.current = { x: smoothed.x, y: smoothed.y };
             strokeHistory.appendPoint({ x: smoothed.x, y: smoothed.y });
-            engine.requestRender();
+            engine.render();
           }
         }
       } else if (gesture === 'erase') {
         if (isGestureDrawingRef.current) {
-          strokeHistory.endStroke();
+          const finished = strokeHistory.endStroke();
           isGestureDrawingRef.current = false;
           lastStrokeNormPointRef.current = null;
           soundEffects.playDrawEnd();
-          engine.invalidateCache();
+          engine.commitStroke(finished);
         }
 
         if (!isGestureErasingRef.current) {
@@ -312,26 +319,25 @@ export const Whiteboard: React.FC<WhiteboardProps> = memo(({
           lastStrokeNormPointRef.current = { x: smoothed.x, y: smoothed.y };
           strokeHistory.startStroke('eraser', '#000000', radius, { x: smoothed.x, y: smoothed.y });
           soundEffects.playErase();
-          engine.requestRender();
+          engine.render();
         } else {
           const prev = lastStrokeNormPointRef.current;
           const dist = prev ? Math.hypot(smoothed.x - prev.x, smoothed.y - prev.y) : Infinity;
           if (dist >= MIN_POINT_STEP_NORM) {
             lastStrokeNormPointRef.current = { x: smoothed.x, y: smoothed.y };
             strokeHistory.appendPoint({ x: smoothed.x, y: smoothed.y });
-            engine.requestRender();
+            engine.render();
           }
         }
       } else {
-        // Pointer ('cursor') or Hold ('pause'): cleanly finish active stroke without clearing filter
+        // Pointer ('cursor') or Hold ('pause'): cleanly commit finished stroke
         if (isGestureDrawingRef.current || isGestureErasingRef.current) {
-          strokeHistory.endStroke();
+          const finished = strokeHistory.endStroke();
           isGestureDrawingRef.current = false;
           isGestureErasingRef.current = false;
           lastStrokeNormPointRef.current = null;
           soundEffects.playDrawEnd();
-          engine.invalidateCache();
-          engine.requestRender();
+          engine.commitStroke(finished);
           onStrokeChange();
         }
       }
@@ -397,11 +403,10 @@ export const Whiteboard: React.FC<WhiteboardProps> = memo(({
       // Ignore
     }
 
-    strokeHistory.endStroke();
+    const finished = strokeHistory.endStroke();
     soundEffects.playDrawEnd();
     if (engineRef.current) {
-      engineRef.current.invalidateCache();
-      engineRef.current.requestRender();
+      engineRef.current.commitStroke(finished);
     }
     onStrokeChange();
   };

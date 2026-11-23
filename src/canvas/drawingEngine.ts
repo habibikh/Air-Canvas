@@ -93,6 +93,45 @@ export class DrawingEngine {
     this.requestRender();
   }
 
+  /**
+   * Incrementally commit a single finished stroke onto inkCanvas & compositeCanvas
+   * without re-rendering the entire stroke history.
+   */
+  public commitStroke(stroke: Stroke | null) {
+    if (!stroke) {
+      this.render();
+      return;
+    }
+
+    if (this.width === 0 || this.height === 0) return;
+
+    if (this.isBgDirty) {
+      this.rebuildBackground();
+    }
+    if (this.isInkDirty) {
+      this.rebuildInk();
+      this.rebuildComposite();
+      this.render();
+      return;
+    }
+
+    this.inkCtx.save();
+    this.inkCtx.scale(this.dpr, this.dpr);
+    this.renderStroke(this.inkCtx, stroke, this.width, this.height);
+    this.inkCtx.restore();
+
+    if (stroke.tool === 'pen') {
+      this.compositeCtx.save();
+      this.compositeCtx.scale(this.dpr, this.dpr);
+      this.renderStroke(this.compositeCtx, stroke, this.width, this.height);
+      this.compositeCtx.restore();
+    } else {
+      this.rebuildComposite();
+    }
+
+    this.render();
+  }
+
   public handleResize() {
     const parent = this.canvas.parentElement;
     const clientWidth = parent ? parent.clientWidth : window.innerWidth;

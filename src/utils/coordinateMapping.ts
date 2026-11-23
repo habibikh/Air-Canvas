@@ -73,11 +73,11 @@ export class PointFilter {
   private getConfigForLevel(level: 'low' | 'medium' | 'high'): SmoothingConfig {
     switch (level) {
       case 'low':
-        return { minCutoff: 3.2, beta: 7.5, dCutoff: 1.5 }; // Instant low-latency tracking
+        return { minCutoff: 6.0, beta: 22.0, dCutoff: 2.5 }; // Ultra-fast raw speed
       case 'medium':
-        return { minCutoff: 1.6, beta: 4.5, dCutoff: 1.2 }; // Balanced zero-tremor & responsive curves
+        return { minCutoff: 3.5, beta: 14.0, dCutoff: 2.0 }; // Crisp, lag-free writing with tremor damping
       case 'high':
-        return { minCutoff: 0.9, beta: 2.5, dCutoff: 1.0 }; // Ultra-steady calligraphy stabilization
+        return { minCutoff: 2.0, beta: 7.5, dCutoff: 1.5 }; // Steady calligraphy stabilization
     }
   }
 
