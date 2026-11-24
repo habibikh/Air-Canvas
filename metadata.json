@@ -1,6 +1,6 @@
 {
   "name": "AirCanvas",
-  "description": "Full-Stack-Ready AI Gesture Whiteboard Web Application with real-time hand tracking and air-drawing.",
+  "description": "Write, point, hold, and erase in thin air using your webcam with AirCanvas. Real-time local hand tracking with zero uploads.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

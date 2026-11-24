@@ -12,12 +12,13 @@ export default defineConfig(() => {
       },
     },
     build: {
+      target: 'es2022',
       rollupOptions: {
         output: {
           manualChunks(id) {
             if (id.includes('@mediapipe/tasks-vision')) return 'mediapipe';
-            if (id.includes('lucide-react')) return 'icons';
-            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) return 'react';
+            if (/[\\/]node_modules[\\/]lucide-react[\\/]/.test(id)) return 'icons';
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react';
           },
         },
       },

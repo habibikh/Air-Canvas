@@ -85,6 +85,14 @@ export class HandTrackingService {
   }
 
   /**
+   * Pre-warm both the MediaPipe JS bundle and WASM/HandLandmarker model right after
+   * initial UI paint so clicking Start Camera connects near-instantly.
+   */
+  public preloadEngine(): void {
+    void this.initMediaPipe().catch(() => {});
+  }
+
+  /**
    * Initializes MediaPipe HandLandmarker lazily with GPU and graceful fallback to CPU
    */
   public async initMediaPipe(): Promise<HandLandmarker> {

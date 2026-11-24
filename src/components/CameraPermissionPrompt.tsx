@@ -22,7 +22,7 @@ export const CameraPermissionPrompt: React.FC<CameraPermissionPromptProps> = ({
   const isRequesting = cameraStatus === 'requesting';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/45 animate-fade-in">
       <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden p-6 sm:p-7 text-center">
         {/* Visual Icon */}
         <div className="relative w-16 h-16 mx-auto mb-4">

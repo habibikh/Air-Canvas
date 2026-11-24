@@ -73,13 +73,23 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const ric = (window as any).requestIdleCallback as ((cb: () => void, opts?: { timeout: number }) => number) | undefined;
-    if (ric) {
-      const id = ric(() => handTrackingService.preloadModule(), { timeout: 1500 });
-      return () => (window as any).cancelIdleCallback?.(id);
-    }
-    const timer = window.setTimeout(() => handTrackingService.preloadModule(), 900);
-    return () => window.clearTimeout(timer);
+    let cancelled = false;
+    const rafId = requestAnimationFrame(() => {
+      const ric = (window as any).requestIdleCallback as ((cb: () => void, opts?: { timeout: number }) => number) | undefined;
+      if (ric) {
+        ric(() => {
+          if (!cancelled) handTrackingService.preloadEngine();
+        }, { timeout: 350 });
+      } else {
+        window.setTimeout(() => {
+          if (!cancelled) handTrackingService.preloadEngine();
+        }, 120);
+      }
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
   }, []);
 
   const updateSettings = useCallback((newPartial: Partial<CanvasSettings>) => {
